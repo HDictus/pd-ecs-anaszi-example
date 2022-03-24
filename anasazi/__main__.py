@@ -15,7 +15,7 @@ def initialize_households(world, n_households, initial_grain=20):
     x = np.random.choice(range(world.mapsize[0]), n_households, replace=False)
     y = np.random.choice(range(world.mapsize[1]), n_households, replace=False)
     grain = np.ones((n_households, )) * initial_grain
-    world.add_entities(position=dict(x=x, y=y), grain_stockpile=dict(grain=grain))
+    world.add_entities({position: dict(x=x, y=y), grain_stockpile: dict(grain=grain)})
     return
 
 
@@ -37,7 +37,7 @@ class YearSystem(System):
 
 class HarvestSystem(System):
 
-    households = [position, grain_stockpile]
+    filters = dict(households = [position, grain_stockpile])
 
     def __init__(self, world):
         super().__init__(world)
@@ -66,16 +66,16 @@ class HarvestSystem(System):
     def year_passes(self):
         # TODO: this could be made better. Ideally we want to only access declared groups.
         # TODO: this is definitely an awkward way to do this. maybe system will automatically refresh after each function call?
-        households = self.households()
-        x = self.world.components.position.loc[households, position.x]
-        y = self.world.components.position.loc[households, position.y]
+        households = self.households.ids
+        x = self.world[position].loc[households, 'x']
+        y = self.world[position].loc[households, 'y']
         harvests = self.calculate_yield(x, y)
         self.world.events.harvest(harvests)
         self.mutate_yield()
 
     def harvest(self, harvests):
-        households = self.households()
-        self.world.components.grain_stockpile.loc[households, 'grain'] +=\
+        households = self.households.ids
+        self.world[grain_stockpile].loc[households, 'grain'] +=\
             harvests
         return
 
@@ -83,13 +83,13 @@ class HarvestSystem(System):
 class MovingSystem(System):
 
     # TODO: can have a maximum distance traveled to keep efficient
-    households = [position, grain_stockpile]
+    filters=dict(households = [position, grain_stockpile])
 
     def harvest(self, harvest):
-        households = self.households()
+        households = self.households.ids
         need = self.world.systems[EatingSystem].yearly_consumption
         expectation = harvest
-        stockpile = self.world.components.grain_stockpile.loc[households, 'grain']
+        stockpile = self.world[grain_stockpile].loc[households, 'grain']
         harvest_needed = need - stockpile
         moving = expectation < harvest_needed
         moving_households = households[moving]
@@ -104,36 +104,65 @@ class MovingSystem(System):
                 posns = np.transpose(np.nonzero(adequate_squares))
                 # TODO: bit of a long way to get components...
                 #   ideally we wouldn't need to.
-                oldposition = self.world.components.position.loc[household, ['x', 'y']].values
+                oldposition = self.world[position].loc[household, ['x', 'y']].values
                 dists = np.linalg.norm(np.float32(posns - oldposition), axis=1)
                 nearest_posn = posns[np.argmin(dists)]
-                self.world.components.position.loc[household, ['x', 'y']] = nearest_posn
+                self.world[position].loc[household, ['x', 'y']] = nearest_posn
                 unoccupied_yields[tuple(oldposition)] = yieldmeans[tuple(oldposition)]
                 unoccupied_yields[tuple(nearest_posn)] = -np.inf
 
     @property
     def occupation(self):
         occu = np.zeros(self.world.mapsize, dtype=bool)
-        positions = self.world.components.position.loc[self.households()]
+        positions = self.world[position].loc[self.households.ids]
         occu[(np.int32(positions['x']), np.int32(positions['y']))] = True
         return occu
 
 
 class EatingSystem(System):
 
-    households = [position, grain_stockpile]
+    filters = dict(households = [position, grain_stockpile])
 
     yearly_consumption = 15
 
     def update(self, dt):
-        current_stockpile = self.world.components.grain_stockpile.loc[self.households(), 'grain']
+        current_stockpile = self.world[grain_stockpile].loc[self.households.ids, 'grain']
         new_stockpile = current_stockpile - self.yearly_consumption * (dt * YEARS_PER_SECOND)
         new_stockpile[new_stockpile < 0] = 0
-        self.world.components.grain_stockpile.loc[self.households(), 'grain'] = new_stockpile
+        self.world[grain_stockpile].loc[self.households.ids, 'grain'] = new_stockpile
+
 
 import time
 import matplotlib.pyplot as plt
 
+
+# class DeathSystem(System):
+
+#     return
+
+
+age = Component("age")
+
+MOVE_OUT_AGE = 17
+MAX_AGE = 40
+
+# class AgeSystem(System):
+
+#     """simplifies birth as happening at household initialization, but new household being formed when the child reaches move out age"""
+
+#     ages = [age]
+#     households = [position, grain_stockpile, age]
+
+#     def year_passes(self):
+#         aging_entities = self.ages()
+#         households = self.households()
+#         self.world.components.age.loc[aging_entities, 'age'] += 1
+#         birthing = self.world.components.age.loc[households] >= MOVE_OUT_AGE
+#         birthing_households = households[birthing]
+#         # half_stockpiles = self.world.components.grain_stockpile.grain.loc[birthing_households] / 2
+
+
+#     return
 
 # def scatter_posns(x, y):
 #     return -y, x
@@ -145,9 +174,9 @@ def plot_world(world):
     ax = fig.gca()
     im = ax.imshow(world.systems[HarvestSystem].yield_mean.transpose(), cmap='RdYlGn',
                    clim=[0, 10])
-    scatter = ax.scatter(x=world.components.position.x,
-                         y=world.components.position.y,
-                         s=world.components.grain_stockpile.grain)
+    scatter = ax.scatter(x=world[position].x,
+                         y=world[position].y,
+                         s=world[grain_stockpile].grain)
     fig.show()
     return fig, ax, scatter, im
 
@@ -156,9 +185,9 @@ def update_plot(fig, ax, scatter, im, world):
     # TODO: we can be more efficient by updating imshow only each year, by making this a system
     im.set(data=world.systems[HarvestSystem].yield_mean.transpose())
     scatter.remove()
-    scatter = ax.scatter(x=world.components.position.x,
-                         y=world.components.position.y,
-                         s=world.components.grain_stockpile.grain,
+    scatter = ax.scatter(x=world[position].x,
+                         y=world[position].y,
+                         s=world[grain_stockpile].grain,
                          c='b')
     # scatter.set_offsets(np.concatenate([x, y], axis=1))
     # scatter.set_sizes(world.components.grain_stockpile.grain)
@@ -169,7 +198,7 @@ def update_plot(fig, ax, scatter, im, world):
 
 
 # some duplication here... can we just declare components as Component(name, *things/**things:type)?
-world = World(position=position, grain_stockpile=grain_stockpile)
+world = World(position, grain_stockpile, age)
 world.mapsize = (100, 100)
 
 YearSystem(world)
@@ -184,6 +213,6 @@ prevt = time.time()
 initt = prevt
 while True:
     currt = time.time()
-    world.update(currt - prevt)
+    world.events.update(currt - prevt)
     prevt = currt
     plotinfo = update_plot(*plotinfo, world)

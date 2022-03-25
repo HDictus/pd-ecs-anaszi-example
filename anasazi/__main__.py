@@ -45,9 +45,9 @@ class HarvestSystem(System):
 
     def __init__(self, world):
         super().__init__(world)
-        self.yield_mean = np.random.uniform(0, 15, size=world.mapsize)
+        self.yield_mean = np.random.uniform(0, 600, size=world.mapsize)
         self.yield_mean = gaussian_filter(self.yield_mean, sigma=2)
-        self.yield_std = np.random.uniform(0, 5, size=world.mapsize)
+        self.yield_std = np.random.uniform(0, 100, size=world.mapsize)
 
     def calculate_yield(self, x, y):
         x = np.int32(np.floor(x))
@@ -89,12 +89,13 @@ class MovingSystem(System):
     # TODO: can have a maximum distance traveled to keep efficient
     filters=dict(households = [position, stockpile])
 
+
     def harvest(self, harvest):
         households = self.households.ids
         need = self.world.systems[EatingSystem].yearly_consumption
         expectation = harvest
-        stockpile = self.world[stockpile].loc[households, 'grain']
-        harvest_needed = need - stockpile
+        grain = self.world[stockpile].loc[households, 'grain']
+        harvest_needed = need - grain
         moving = expectation < harvest_needed
         moving_households = households[moving]
         self.world.events.households_move(moving_households, harvest_needed[moving])
@@ -107,16 +108,28 @@ class MovingSystem(System):
         for harvest_needed, household in zip(
                 harvest_needed, moving_households):
             adequate_squares = unoccupied_yields > harvest_needed
+            # TODO: I know how to fix
             if adequate_squares.any():
-                posns = np.transpose(np.nonzero(adequate_squares))
-                # TODO: bit of a long way to get components...
-                #   ideally we wouldn't need to.
-                oldposition = self.world[position].loc[household, ['x', 'y']].values
-                dists = np.linalg.norm(np.float32(posns - oldposition), axis=1)
-                nearest_posn = posns[np.argmin(dists)]
-                self.world[position].loc[household, ['x', 'y']] = nearest_posn
-                unoccupied_yields[tuple(oldposition)] = yieldmeans[tuple(oldposition)]
-                unoccupied_yields[tuple(nearest_posn)] = -np.inf
+                self.move_to_nearest_adequate(
+                    adequate_squares, household, yieldmeans,
+                    unoccupied_yields)
+            else:
+                self.move_to_nearest_adequate(unoccupied_yields > -np.inf,
+                                              household, yieldmeans,
+                                              unoccupied_yields)
+
+    def move_to_nearest_adequate(self, adequate_squares, household, yieldmeans,
+                                 unoccupied_yields):
+        posns = np.transpose(np.nonzero(adequate_squares))
+        # TODO: bit of a long way to get components...
+        #   ideally we wouldn't need to.
+        oldposition = self.world[position].loc[household, ['x', 'y']].values
+        dists = np.linalg.norm(np.float32(posns - oldposition), axis=1)
+        nearest_posn = posns[np.argmin(dists)]
+        self.world[position].loc[household, ['x', 'y']] = nearest_posn
+        unoccupied_yields[tuple(oldposition)] = yieldmeans[tuple(oldposition)]
+        unoccupied_yields[tuple(nearest_posn)] = -np.inf
+
 
     @property
     def occupation(self):
@@ -159,7 +172,6 @@ class AgeSystem(System):
     move_out_age = 16
     death_age = 40
 
-
     def year_passes(self):
         """
         Assumptions:
@@ -179,6 +191,8 @@ class AgeSystem(System):
         households = self.households.ids
         moving_out = self.world[age].loc[households, 'age'] >= self.move_out_age
         moving_out_ids = self.world[age].loc[households].index[moving_out]
+        if len(moving_out_ids) > 0:
+            print(len(moving_out_ids))
         self.world.events.children_move_out(moving_out_ids)
         too_old = self.world[age].loc[aging_entities, 'age'] >= self.death_age
         too_old_ids = self.world[age].loc[aging_entities].index[too_old]
@@ -218,8 +232,7 @@ def plot_world(world):
     # this may be a little confusing wrt the name v.s. the actual column...
     fig = plt.figure()
     ax = fig.gca()
-    im = ax.imshow(world.systems[HarvestSystem].yield_mean.transpose(), cmap='RdYlGn',
-                   clim=[0, 10])
+    im = ax.imshow(world.systems[HarvestSystem].yield_mean.transpose(), cmap='RdYlGn')
     scatter = ax.scatter(x=world[position].x,
                          y=world[position].y,
                          s=world[stockpile].grain)
@@ -264,3 +277,6 @@ while True:
     world.events.update(currt - prevt)
     plotinfo = update_plot(*plotinfo, world)
     prevt = currt
+
+
+# TODO: next: add starvation

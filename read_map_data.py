@@ -147,10 +147,10 @@ if __name__ == "__main__":
     arr = []
     for year in range(START_YEAR, END_YEAR):
         yld = yield_in_year(year, z, y, drought_index)
-        arr.append(yld)
+        arr.append(yld[np.newaxis])
         # plt.imshow(yld)
         # plt.colorbar()
         # plt.title(f'crop yield {year} AD')
         # plt.show()
-        print(f'crop yield {year} AD')
+        print(f'crop yield {year} AD', yld.shape)
     np.save("yields 800-1349.npy", np.concatenate(arr))

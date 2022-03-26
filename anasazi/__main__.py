@@ -4,7 +4,7 @@ from scipy.ndimage import gaussian_filter
 
 # for now we just do farming on a random map with random changes
 
-YEARS_PER_SECOND = 2
+YEARS_PER_SECOND = 1
 
 # TODO: better as kwargs name: type?
 position = Component("x", "y")
@@ -42,27 +42,43 @@ class YearSystem(System):
             self.world.events.year_passes()
 
 
+# TODO: consider systems in isolation, for the needed parameters, what are they to that system?
+#    where should they come from?
+#    e.g. globals provided at init...
+#    or provided to world?
+
+
 class HarvestSystem(System):
 
     filters = dict(households = [position, stockpile])
 
-    min_yield = 0
-    max_yield = 1650
+    # min_yield = 0
+    # max_yield = 1650
 
     def __init__(self, world):
         super().__init__(world)
-        self.yield_mean = np.random.uniform(self.min_yield, self.max_yield, size=world.mapsize)
-        self.yield_mean = gaussian_filter(self.yield_mean, sigma=2)
-        self.yield_std = np.random.uniform(0, 100, size=world.mapsize)
+        # self.yield_mean = np.random.uniform(self.min_yield, self.max_yield, size=world.mapsize)
+        # self.yield_mean = gaussian_filter(self.yield_mean, sigma=2)
+        # self.yield_std = np.random.uniform(0, 100, size=world.mapsize)
+        self.yield_by_year = np.load("yields 800-1349.npy")
+        self.yield_by_year *= 1 + (np.random.normal(
+            0, 0.4, size=self.yield_by_year.shape[1:]))  # TODO: parameterize
+
+    @property
+    def yield_mean(self):
+        year = int(np.floor(self.world.systems[YearSystem].year))
+        start_year = 800  # TODO: more example of mixing responsibilities
+        yld = self.yield_by_year[year - 800]
+        return yld
 
     def calculate_yield(self, x, y):
         x = np.int32(np.floor(x))
         y = np.int32(np.floor(y))
         means = self.yield_mean[(x, y)]
-        stds = self.yield_std[(x, y)]
-        actual = np.random.normal(means, stds)
-        actual[actual < 0] = 0
-        return actual
+        # stds = self.yield_std
+        # actual = np.random.normal(means, stds)
+        # actual[actual < 0] = 0
+        return means
 
     def mutate_yield(self):
         self.yield_mean += np.random.normal(size=self.yield_mean.shape, scale=0.1)
@@ -81,7 +97,7 @@ class HarvestSystem(System):
         y = self.world[position].loc[households, 'y']
         harvests = self.calculate_yield(x, y)
         self.world.events.harvest(harvests)
-        self.mutate_yield()
+        # self.mutate_yield()
 
     def harvest(self, harvests):
         households = self.households.ids
@@ -99,6 +115,7 @@ class MovingSystem(System):
     def harvest(self, harvest):
         households = self.households.ids
         need = self.world.systems[EatingSystem].yearly_consumption
+
         expectation = harvest
         grain = self.world[stockpile].loc[households, 'grain']
         harvest_needed = need - grain
@@ -110,10 +127,9 @@ class MovingSystem(System):
         yieldmeans = self.world.systems[HarvestSystem].yield_mean
         unoccupied_yields = yieldmeans.copy()
         unoccupied_yields[self.occupation] = -np.inf
-
+        adequate_squares = unoccupied_yields > self.world.systems[EatingSystem].yearly_consumption
         for harvest_needed, household in zip(
                 harvest_needed, moving_households):
-            adequate_squares = unoccupied_yields > harvest_needed
             # TODO: I know how to fix
             if adequate_squares.any():
                 self.move_to_nearest_adequate(
@@ -177,6 +193,8 @@ class AgeSystem(System):
                    households=[age, stockpile])
 
     move_out_age = 16
+
+    # TODO: fertility, fertility ends age
     death_age = 40
 
     def year_passes(self):
@@ -258,7 +276,7 @@ def update_plot(fig, ax, scatter, im, world):
     scatter.remove()
     scatter = ax.scatter(x=world[position].x,
                          y=world[position].y,
-                         s=world[stockpile].grain / 1500,
+                         s=world[stockpile].grain / 800,
                          c='b')
     # scatter.set_offsets(np.concatenate([x, y], axis=1))
     # scatter.set_sizes(world.components.stockpile.grain)
@@ -270,7 +288,7 @@ def update_plot(fig, ax, scatter, im, world):
 
 # some duplication here... can we just declare components as Component(name, *things/**things:type)?
 world = World(position, stockpile, age)
-world.mapsize = (100, 100)
+world.mapsize = (80, 120)
 
 YearSystem(world)
 HarvestSystem(world)
@@ -279,16 +297,16 @@ MovingSystem(world)
 AgeSystem(world)
 MoveOutSystem(world)
 
-initialize_households(world, 20)
+initialize_households(world, 80)
 
 plotinfo = plot_world(world)
 prevt = time.time()
 initt = prevt
 while True:
     currt = time.time()
+    world.events.update(currt - prevt)
     prevt = currt
-    world.events.update(1/YEARS_PER_SECOND) # currt - prevt)
-    if np.floor(world.systems[YearSystem].year) % 16 == 0:
-        plotinfo = update_plot(*plotinfo, world)
-        print("population:", world[position].shape[0])
+    # if np.floor(world.systems[YearSystem].year) % 16 == 0:
+    plotinfo = update_plot(*plotinfo, world)
+    # print("population:", world[position].shape[0])
 # TODO: parameterize step size

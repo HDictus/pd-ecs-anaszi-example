@@ -12,12 +12,15 @@ stockpile = Component("grain")
 
 
 def initialize_households(world, n_households, initial_grain=1600):
-    x = np.random.choice(range(world.mapsize[0]), n_households, replace=False)
-    y = np.random.choice(range(world.mapsize[1]), n_households, replace=False)
+    positions = np.array(
+        [[x, y]
+         for x in range(world.mapsize[0])
+         for y in range(world.mapsize[1])])
+    xy = positions[np.random.choice(range(len(positions)), n_households, replace=False)]
     grain = np.ones((n_households, )) * initial_grain
-    households_data = {position: dict(x=x, y=y),
+    households_data = {position: dict(x=xy[:, 0], y=xy[:, 1]),
                        stockpile: dict(grain=grain),
-                       age: dict(age=np.zeros(x.shape))}
+                       age: dict(age=np.zeros(grain.shape))}
     world.add_entities(
         households_data)
     return
@@ -51,7 +54,7 @@ class YearSystem(System):
 class HarvestSystem(System):
 
     filters = dict(households = [position, stockpile])
-
+    max_grain_stock = 1600
     # min_yield = 0
     # max_yield = 1650
 
@@ -101,8 +104,11 @@ class HarvestSystem(System):
 
     def harvest(self, harvests):
         households = self.households.ids
-        self.world[stockpile].loc[households, 'grain'] +=\
-            harvests
+        # TODO: seems that stockpile requires a system just to manage its mutations
+        #   can I make that simpler?
+        self.world[stockpile].loc[households, 'grain'] = np.clip(
+            self.world[stockpile].loc[households, 'grain'] + harvests,
+            0, self.max_grain_stock)
         return
 
 
@@ -120,8 +126,9 @@ class MovingSystem(System):
 
     @property
     def habitable(self):
-        return self.world.systems[HarvestSystem].yield_mean\
+        habitable = self.world.systems[HarvestSystem].yield_mean\
             >= self.world.systems[EatingSystem].yearly_consumption
+        return habitable
 
     def harvest(self, harvest):
         households = self.households.ids
@@ -176,9 +183,9 @@ class EatingSystem(System):
 
     yearly_consumption = 160 * 5  # 160 kg of grain p.p., avg 5 per household
 
-    def update(self, dt):
+    def year_passes(self):
         current_stockpile = self.world[stockpile].loc[self.households.ids, 'grain']
-        new_stockpile = current_stockpile - self.yearly_consumption * (dt * YEARS_PER_SECOND)
+        new_stockpile = current_stockpile - self.yearly_consumption
         starving = current_stockpile.index[new_stockpile < 0]
         self.world[stockpile].loc[self.households.ids, 'grain'] = new_stockpile
         self.world.remove_entities(starving)

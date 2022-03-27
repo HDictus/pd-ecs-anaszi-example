@@ -4,7 +4,7 @@ from scipy.ndimage import gaussian_filter
 
 # for now we just do farming on a random map with random changes
 
-YEARS_PER_SECOND = 1
+YEARS_PER_SECOND = 20
 
 # TODO: better as kwargs name: type?
 position = Component("x", "y")
@@ -121,24 +121,29 @@ class MovingSystem(System):
         harvest_needed = need - grain
         moving = expectation < harvest_needed
         moving_households = households[moving]
-        self.world.events.households_move(moving_households, harvest_needed[moving])
+        new_positions = self.new_farmlands(
+            moving_households, harvest_needed[moving])
+        self.world.events.households_move(moving_households, new_positions)
 
-    def households_move(self, moving_households, harvest_needed):
+    def new_farmlands(self, moving_households, harvest_needed):
         yieldmeans = self.world.systems[HarvestSystem].yield_mean
         unoccupied_yields = yieldmeans.copy()
         unoccupied_yields[self.occupation] = -np.inf
         adequate_squares = unoccupied_yields > self.world.systems[EatingSystem].yearly_consumption
+        newposns = []
         for harvest_needed, household in zip(
                 harvest_needed, moving_households):
             # TODO: I know how to fix
             if adequate_squares.any():
-                self.move_to_nearest_adequate(
+                newposns.append(self.move_to_nearest_adequate(
                     adequate_squares, household, yieldmeans,
-                    unoccupied_yields)
+                    unoccupied_yields))
             else:
-                self.move_to_nearest_adequate(unoccupied_yields > -np.inf,
-                                              household, yieldmeans,
-                                              unoccupied_yields)
+                newposns.append(self.move_to_nearest_adequate(
+                    unoccupied_yields > -np.inf,
+                    household, yieldmeans,
+                    unoccupied_yields))
+        return newposns
 
     def move_to_nearest_adequate(self, adequate_squares, household, yieldmeans,
                                  unoccupied_yields):
@@ -153,6 +158,7 @@ class MovingSystem(System):
         unoccupied_yields[tuple(nearest_posn)] = -np.inf
 
 
+class
     @property
     def occupation(self):
         occu = np.zeros(self.world.mapsize, dtype=bool)
@@ -196,6 +202,7 @@ class AgeSystem(System):
 
     # TODO: fertility, fertility ends age
     death_age = 40
+    fertility = 0.155  # chance of having a baby each year
 
     def year_passes(self):
         """
@@ -214,7 +221,11 @@ class AgeSystem(System):
         # TODO: there has to be a way to make the below smoother
         # it shouldn't belong to agesystem
         households = self.households.ids
-        moving_out = self.world[age].loc[households, 'age'] >= self.move_out_age
+        moving_out = np.logical_and(
+            np.random.uniform(0, 1, size=len(households)) < self.fertility,
+            self.world[age].loc[households, 'age'] >= self.move_out_age)
+            # self.world[age].loc[households, 'age'] >= self.move_out_age
+        # moveout = np.random.uniform(0, 1, size=moving_out) >
         moving_out_ids = self.world[age].loc[households].index[moving_out]
 
         self.world.events.children_move_out(moving_out_ids)
@@ -306,7 +317,12 @@ while True:
     currt = time.time()
     world.events.update(currt - prevt)
     prevt = currt
-    # if np.floor(world.systems[YearSystem].year) % 16 == 0:
-    plotinfo = update_plot(*plotinfo, world)
-    # print("population:", world[position].shape[0])
+    if np.floor(world.systems[YearSystem].year) % 16 == 0:
+        plotinfo = update_plot(*plotinfo, world)
+        print("population:", world[position].shape[0])
+        fields = np.zeros(world.mapsize)
+        for _, posn in world[position].iterrows():
+            fields[posn['x'], posn['y']] += 1
+        print(np.max(fields))
+
 # TODO: parameterize step size

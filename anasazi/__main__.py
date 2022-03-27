@@ -111,6 +111,17 @@ class MovingSystem(System):
     # TODO: can have a maximum distance traveled to keep efficient
     filters=dict(households = [position, stockpile])
 
+    @property
+    def occupied(self):
+        occ = np.zeros(self.world.mapsize, dtype=bool)
+        posns = np.int32(self.world[position].loc[self.households.ids].values)
+        occ[posns[:, 0], posns[:, 1]] = True
+        return occ
+
+    @property
+    def habitable(self):
+        return self.world.systems[HarvestSystem].yield_mean\
+            >= self.world.systems[EatingSystem].yearly_consumption
 
     def harvest(self, harvest):
         households = self.households.ids
@@ -121,50 +132,42 @@ class MovingSystem(System):
         harvest_needed = need - grain
         moving = expectation < harvest_needed
         moving_households = households[moving]
-        new_positions = self.new_farmlands(
-            moving_households, harvest_needed[moving])
-        self.world.events.households_move(moving_households, new_positions)
+        if len(moving_households) > 0:
+            self.world.events.seek_new_farmland(moving_households)
 
-    def new_farmlands(self, moving_households, harvest_needed):
-        yieldmeans = self.world.systems[HarvestSystem].yield_mean
-        unoccupied_yields = yieldmeans.copy()
-        unoccupied_yields[self.occupation] = -np.inf
-        adequate_squares = unoccupied_yields > self.world.systems[EatingSystem].yearly_consumption
-        newposns = []
-        for harvest_needed, household in zip(
-                harvest_needed, moving_households):
-            # TODO: I know how to fix
-            if adequate_squares.any():
-                newposns.append(self.move_to_nearest_adequate(
-                    adequate_squares, household, yieldmeans,
-                    unoccupied_yields))
-            else:
-                newposns.append(self.move_to_nearest_adequate(
-                    unoccupied_yields > -np.inf,
-                    household, yieldmeans,
-                    unoccupied_yields))
-        return newposns
+    def seek_new_farmland(self, moving_households):
+        new_positions, success, homeless = self.new_farmlands(
+            moving_households)
+        self.world.remove_entities(homeless)
+        self.world.events.households_move(success, new_positions)
 
-    def move_to_nearest_adequate(self, adequate_squares, household, yieldmeans,
-                                 unoccupied_yields):
-        posns = np.transpose(np.nonzero(adequate_squares))
-        # TODO: bit of a long way to get components...
-        #   ideally we wouldn't need to.
-        oldposition = self.world[position].loc[household, ['x', 'y']].values
-        dists = np.linalg.norm(np.float32(posns - oldposition), axis=1)
-        nearest_posn = posns[np.argmin(dists)]
-        self.world[position].loc[household, ['x', 'y']] = nearest_posn
-        unoccupied_yields[tuple(oldposition)] = yieldmeans[tuple(oldposition)]
-        unoccupied_yields[tuple(nearest_posn)] = -np.inf
+    def new_farmlands(self, moving_households):
+        available_farmland = list(np.transpose(np.nonzero(
+            np.logical_and(~self.occupied, self.habitable))))
+        positions = self.world[position].loc[moving_households].values
+        moving = []
+        homeless = []
+        newplaces = []
+        for household, posn in zip(moving_households, positions):
+            if len(available_farmland) == 0:
+                homeless.append(household)
+                continue
+            index = nearest(posn, np.array(available_farmland))
+            moving.append(household)
+            newplaces.append(available_farmland.pop(index))
+        return newplaces, moving, homeless
+
+    def households_move(self, movers, new_positions):
+        if movers:
+            self.world[position].loc[movers] = np.array(new_positions)
+        return
 
 
-class
-    @property
-    def occupation(self):
-        occu = np.zeros(self.world.mapsize, dtype=bool)
-        positions = self.world[position].loc[self.households.ids]
-        occu[(np.int32(positions['x']), np.int32(positions['y']))] = True
-        return occu
+def nearest(position, farmland):
+    # print(position, farmland, '?????????????')
+    dists = np.linalg.norm(position - farmland, axis=1)
+    return np.argmin(dists)
+
 
 
 class EatingSystem(System):
@@ -253,7 +256,7 @@ class MoveOutSystem(System):
                    age: dict(age=np.zeros(gift.shape))}
         new = world.add_entities(newdata)
 
-        self.world.events.households_move(new, self.world.systems[EatingSystem].yearly_consumption - gift)
+        self.world.events.seek_new_farmland(new)
 
 
 

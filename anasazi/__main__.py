@@ -9,6 +9,8 @@ YEARS_PER_SECOND = 5
 # TODO: better as kwargs name: type?
 position = Component("x", "y")
 stockpile = Component("grain")
+farmland = Component('id')
+grain_yield = Component('mean', 'std')
 
 
 def initialize_households(world, n_households, initial_grain=1600):
@@ -18,9 +20,16 @@ def initialize_households(world, n_households, initial_grain=1600):
          for y in range(world.mapsize[1])])
     xy = positions[np.random.choice(range(len(positions)), n_households, replace=False)]
     grain = np.ones((n_households, )) * initial_grain
+
+    farmlands = world.add_entities(
+        {position: dict(x=np.zeros(xy[:, 0].shape) + np.nan,
+                        y=np.nan),
+         grain_yield: dict(mean=np.zeros(xy[:, 0].shape), std=0)})
+    # TODO: this is silly
     households_data = {position: dict(x=xy[:, 0], y=xy[:, 1]),
                        stockpile: dict(grain=grain),
-                       age: dict(age=np.zeros(grain.shape))}
+                       age: dict(age=np.zeros(grain.shape)),
+                       farmland: dict(id=farmlands)}
     households = world.add_entities(
         households_data)
     world.events.seek_new_farmland(households)
@@ -54,7 +63,9 @@ class YearSystem(System):
 
 class HarvestSystem(System):
 
-    filters = dict(households = [position, stockpile])
+    filters = dict(households = [position, stockpile, farmland],
+                   farms= [position, grain_yield])
+
     max_grain_stock = 1600
     soil_quality_variance = 0.4  # as proportion of yield
     harvest_variance = 2  # as proportion of yield
@@ -81,11 +92,11 @@ class HarvestSystem(System):
     def calculate_yield(self, x, y):
         x = np.int32(np.floor(x))
         y = np.int32(np.floor(y))
-        means = self.yield_mean[(x, y)]
+        grainyields = self.world[grain_yield].loc[self.farms.ids]
         # stds = self.yield_std
         # actual = np.random.normal(means, stds)
         # actual[actual < 0] = 0
-        return means + np.random.normal(1, self.harvest_variance, size=means.shape)
+        return np.random.normal(grainyields['mean'], grainyields['std'])
 
     def mutate_yield(self):
         self.yield_mean += np.random.normal(size=self.yield_mean.shape, scale=0.1)
@@ -103,11 +114,10 @@ class HarvestSystem(System):
         x = self.world[position].loc[households, 'x']
         y = self.world[position].loc[households, 'y']
         harvests = self.calculate_yield(x, y)
-        self.world.events.harvest(harvests)
+        self.world.events.harvest(households, harvests)
         # self.mutate_yield()
 
-    def harvest(self, harvests):
-        households = self.households.ids
+    def harvest(self, households, harvests):
         # TODO: seems that stockpile requires a system just to manage its mutations
         #   can I make that simpler?
         self.world[stockpile].loc[households, 'grain'] = np.clip(
@@ -119,7 +129,8 @@ class HarvestSystem(System):
 class MovingSystem(System):
 
     # TODO: can have a maximum distance traveled to keep efficient
-    filters=dict(households = [position, stockpile])
+    filters=dict(households = [position, stockpile, farmland],
+                 farms=[position, grain_yield])
 
     @property
     def occupied(self):
@@ -150,6 +161,7 @@ class MovingSystem(System):
         new_positions, success, homeless = self.new_farmlands(
             moving_households)
         self.world.remove_entities(homeless)
+
         self.world.events.households_move(success, new_positions)
 
     def new_farmlands(self, moving_households):
@@ -288,9 +300,11 @@ def plot_world(world):
     fig = plt.figure()
     ax = fig.gca()
     im = ax.imshow(world.systems[HarvestSystem].yield_mean.transpose(), cmap='RdYlGn')
+    ax.scatter(x=world[position].x, y=np.zeros(world[position].x.shape))
+    print((world[stockpile].grain / 1500))
     scatter = ax.scatter(x=world[position].x,
                          y=world[position].y,
-                         s=(world[stockpile].grain / 1500))
+                         s=world[stockpile].grain / 1500)
     fig.show()
     return fig, ax, scatter, im
 
@@ -312,7 +326,8 @@ def update_plot(fig, ax, scatter, im, world):
 
 
 # some duplication here... can we just declare components as Component(name, *things/**things:type)?
-world = World(position, stockpile, age)
+
+world = World(position, stockpile, age, grain_yield, farmland)
 world.mapsize = (80, 120)
 
 YearSystem(world)
@@ -338,5 +353,6 @@ while True:
         for _, posn in world[position].iterrows():
             fields[posn['x'], posn['y']] += 1
         print(np.max(fields))
+
 
 # TODO: parameterize step size

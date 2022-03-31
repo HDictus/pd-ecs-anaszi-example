@@ -4,7 +4,7 @@ from scipy.ndimage import gaussian_filter
 
 # for now we just do farming on a random map with random changes
 
-YEARS_PER_SECOND = 20
+YEARS_PER_SECOND = 5
 
 # TODO: better as kwargs name: type?
 position = Component("x", "y")
@@ -21,8 +21,9 @@ def initialize_households(world, n_households, initial_grain=1600):
     households_data = {position: dict(x=xy[:, 0], y=xy[:, 1]),
                        stockpile: dict(grain=grain),
                        age: dict(age=np.zeros(grain.shape))}
-    world.add_entities(
+    households = world.add_entities(
         households_data)
+    world.events.seek_new_farmland(households)
     return
 
 
@@ -55,6 +56,8 @@ class HarvestSystem(System):
 
     filters = dict(households = [position, stockpile])
     max_grain_stock = 1600
+    soil_quality_variance = 0.4  # as proportion of yield
+    harvest_variance = 2  # as proportion of yield
     # min_yield = 0
     # max_yield = 1650
 
@@ -65,7 +68,8 @@ class HarvestSystem(System):
         # self.yield_std = np.random.uniform(0, 100, size=world.mapsize)
         self.yield_by_year = np.load("yields 800-1349.npy")
         self.yield_by_year *= 1 + (np.random.normal(
-            0, 0.4, size=self.yield_by_year.shape[1:]))  # TODO: parameterize
+            0, self.soil_quality_variance, size=self.yield_by_year.shape[1:]))  # TODO: parameterize
+        # self.yield_by_year = gaussian_filter(self.yield_by_year, sigma=0.8)
 
     @property
     def yield_mean(self):
@@ -81,7 +85,7 @@ class HarvestSystem(System):
         # stds = self.yield_std
         # actual = np.random.normal(means, stds)
         # actual[actual < 0] = 0
-        return means
+        return means + np.random.normal(1, self.harvest_variance, size=means.shape)
 
     def mutate_yield(self):
         self.yield_mean += np.random.normal(size=self.yield_mean.shape, scale=0.1)
@@ -318,7 +322,7 @@ MovingSystem(world)
 AgeSystem(world)
 MoveOutSystem(world)
 
-initialize_households(world, 80)
+initialize_households(world, 5)
 
 plotinfo = plot_world(world)
 prevt = time.time()
@@ -327,7 +331,7 @@ while True:
     currt = time.time()
     world.events.update(currt - prevt)
     prevt = currt
-    if np.floor(world.systems[YearSystem].year) % 16 == 0:
+    if np.floor(world.systems[YearSystem].year) % 1 == 0:
         plotinfo = update_plot(*plotinfo, world)
         print("population:", world[position].shape[0])
         fields = np.zeros(world.mapsize)

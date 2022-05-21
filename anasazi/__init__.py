@@ -1,5 +1,6 @@
 import numpy as np
 from pathlib import Path
+import pandas as pd
 from pd_ecs import Component, System
 
 position = Component("x", "y")
@@ -24,6 +25,7 @@ class HarvestSystem(System):
         self.rng = rng or np.random.default_rng()
         if yield_data is None:
             yield_data = np.load(Path(__file__).parent / "yields 800-1349.npy")
+
         soil_qualtity = 1 + (self.rng.normal(
             0, soil_quality_variance, size=yield_data.shape[1:]))
 
@@ -60,12 +62,18 @@ class HarvestSystem(System):
         return np.random.normal(grainyields['mean'], grainyields['std'])
 
     def year_passes(self):
-        # TODO: this could be made better. Ideally we want to only access declared groups.
-        # TODO: this is definitely an awkward way to do this. maybe system will automatically refresh after each function call?
-        households = self.households.ids
-        farm_ids = self.world[farmland].loc[households, 'id']
-        harvests = self.calculate_yield(farm_ids)
-        self.world.events.harvest(households, harvests)
+        self._yield_index += 1
+        mean = self.mean_this_year.flatten()
+        var = self.harvest_variance * mean
+        self.world[grain_yield][['mean', 'var']].loc[self.land.ids]\
+            = pd.DataFrame({'mean': mean, 'var': var}, index=self.land.ids)
+        return
+        # # TODO: this could be made better. Ideally we want to only access declared groups.
+        # # TODO: this is definitely an awkward way to do this. maybe system will automatically refresh after each function call?
+        # households = self.households.ids
+        # farm_ids = self.world[farmland].loc[households, 'id']
+        # harvests = self.calculate_yield(farm_ids)
+        # self.world.events.harvest(households, harvests)
         # self.mutate_yield()
 
     def harvest(self, households, harvests):

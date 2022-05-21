@@ -22,7 +22,7 @@ def test_system_updates_yield_yearly():
                         soil_quality_variance=soil_quality_variance,
                         harvest_variance=harvest_variance)
     sys.initialize()
-    pd.assert_frame_equal(
+    pd.testing.assert_frame_equal(
         world[grain_yield],
         pd.DataFrame({'mean': expected_mean,
                       'var': harvest_variance * expected_mean}))

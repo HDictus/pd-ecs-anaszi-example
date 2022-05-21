@@ -3,7 +3,7 @@ from pathlib import Path
 from pd_ecs import Component, System
 
 position = Component("x", "y")
-grain_yield = Component('mean', 'std')
+grain_yield = Component('mean', 'var')
 stockpile = Component("grain")
 farmland = Component('id')
 
@@ -11,28 +11,49 @@ farmland = Component('id')
 class HarvestSystem(System):
 
     filters = dict(households=[position, stockpile, farmland],
-                   farms=[position, grain_yield])
+                   land=[position, grain_yield])
 
     max_grain_stock = 1600
 
     def __init__(self, world,
-                 yield_data=None, soil_quality_variance=0.4, harvest_variance=2,
+                 yield_data=None,
+                 soil_quality_variance=0.4, harvest_variance=2,
                  rng=None):
         super().__init__(world)
+
         self.rng = rng or np.random.default_rng()
         if yield_data is None:
             yield_data = np.load(Path(__file__).parent / "yields 800-1349.npy")
-        soil_qualtity = 1 + (rng.normal(
+        soil_qualtity = 1 + (self.rng.normal(
             0, soil_quality_variance, size=yield_data.shape[1:]))
+
         self.yield_mean_by_year = yield_data * soil_qualtity
-        self.yield_by_year = np.load("yields 800-1349.npy")
+        self.harvest_variance = harvest_variance
+        self.world.mapsize = yield_data[0].shape
+        self._yield_index = None
 
     @property
-    def yield_mean(self):
-        year = int(np.floor(self.world.systems[YearSystem].year))
-        start_year = 800  # TODO: more example of mixing responsibilities
-        yld = self.yield_by_year[year - 800]
-        return yld
+    def mean_this_year(self):
+        if self._yield_index is None:
+            self._yield_index = 0
+        return self.yield_mean_by_year[self._yield_index]
+
+    def initialize(self):
+        mean_this_year = self.mean_this_year
+        x = []
+        y = []
+        mean = []
+        var = []
+        for (i, j), mn in np.ndenumerate(mean_this_year):
+            x.append(i)
+            y.append(j)
+            mean.append(mn)
+            var.append(mn * self.harvest_variance)
+
+        self.world.add_entities(
+            {grain_yield: dict(mean=mean,
+                               var=var),
+             position: dict(x=x, y=y)})
 
     def calculate_yield(self, farm_ids):
         grainyields = self.world[grain_yield].loc[farm_ids]

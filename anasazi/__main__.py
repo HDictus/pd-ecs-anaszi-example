@@ -1,7 +1,6 @@
 from pd_ecs import World, System, Component
 import numpy as np
-from scipy.ndimage import gaussian_filter
-
+from anasazi import position, grain_yield, stockpile, farmland, HarvestSystem
 # for now we just do farming on a random map with random changes
 
 YEARS_PER_SECOND = 5
@@ -14,10 +13,7 @@ YEARS_PER_SECOND = 5
 #   it is removed when a household is removed
 # TODO: test-driven refactoring is very important
 
-position = Component("x", "y")
-stockpile = Component("grain")
-farmland = Component('id')
-grain_yield = Component('mean', 'std')
+
 
 
 def initialize_households(world, n_households, initial_grain=1600):
@@ -67,67 +63,6 @@ class YearSystem(System):
 #    e.g. globals provided at init...
 #    or provided to world?
 
-
-class HarvestSystem(System):
-
-    filters = dict(households = [position, stockpile, farmland],
-                   farms= [position, grain_yield])
-
-    max_grain_stock = 1600
-    soil_quality_variance = 0.4  # as proportion of yield
-    harvest_variance = 2  # as proportion of yield
-    # min_yield = 0
-    # max_yield = 1650
-
-    def __init__(self, world):
-        super().__init__(world)
-        # self.yield_mean = np.random.uniform(self.min_yield, self.max_yield, size=world.mapsize)
-        # self.yield_mean = gaussian_filter(self.yield_mean, sigma=2)
-        # self.yield_std = np.random.uniform(0, 100, size=world.mapsize)
-        self.yield_by_year = np.load("yields 800-1349.npy")
-        self.yield_by_year *= 1 + (np.random.normal(
-            0, self.soil_quality_variance, size=self.yield_by_year.shape[1:]))  # TODO: parameterize
-        # self.yield_by_year = gaussian_filter(self.yield_by_year, sigma=0.8)
-
-    @property
-    def yield_mean(self):
-        year = int(np.floor(self.world.systems[YearSystem].year))
-        start_year = 800  # TODO: more example of mixing responsibilities
-        yld = self.yield_by_year[year - 800]
-        return yld
-
-    def calculate_yield(self, farm_ids):
-        grainyields = self.world[grain_yield].loc[farm_ids]
-        # stds = self.yield_std
-        # actual = np.random.normal(means, stds)
-        # actual[actual < 0] = 0
-        return np.random.normal(grainyields['mean'], grainyields['std'])
-
-    def mutate_yield(self):
-        self.yield_mean += np.random.normal(size=self.yield_mean.shape, scale=0.1)
-        # normalized_yield = self.yield_mean - self.yield_mean.mean()
-        # self.yield_mean = gaussian_filter(self.yield_mean, sigma=0.01)
-        # self.yield_mean += (
-        #     0.05 * gaussian_filter(normalized_yield, sigma=0.75)
-        #     - 0.01 * normalized_yield**2)
-        self.yield_mean[self.yield_mean < 0] = 0
-
-    def year_passes(self):
-        # TODO: this could be made better. Ideally we want to only access declared groups.
-        # TODO: this is definitely an awkward way to do this. maybe system will automatically refresh after each function call?
-        households = self.households.ids
-        farm_ids = self.world[farmland].loc[households, 'id']
-        harvests = self.calculate_yield(farm_ids)
-        self.world.events.harvest(households, harvests)
-        # self.mutate_yield()
-
-    def harvest(self, households, harvests):
-        # TODO: seems that stockpile requires a system just to manage its mutations
-        #   can I make that simpler?
-        self.world[stockpile].loc[households, 'grain'] = np.clip(
-            self.world[stockpile].loc[households, 'grain'] + harvests,
-            0, self.max_grain_stock)
-        return
 
 
 class MovingSystem(System):
@@ -323,6 +258,8 @@ class PlotSystem(System):
         self.ax.set_title(str(world.systems[YearSystem].year))
         self.fig.canvas.draw_idle()
         self.fig.canvas.flush_events()
+
+
 
 
 # TODO: best practices for proper separatiion between systems

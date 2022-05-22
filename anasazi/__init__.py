@@ -38,6 +38,7 @@ class HarvestSystem(System):
     def mean_this_year(self):
         if self._yield_index is None:
             self._yield_index = 0
+        print(self._yield_index)
         return self.yield_mean_by_year[self._yield_index]
 
     def initialize(self):
@@ -65,20 +66,11 @@ class HarvestSystem(System):
         self._yield_index += 1
         mean = self.mean_this_year.flatten()
         var = self.harvest_variance * mean
-        self.world[grain_yield][['mean', 'var']].loc[self.land.ids]\
-            = pd.DataFrame({'mean': mean, 'var': var}, index=self.land.ids)
+        self.world[grain_yield].loc[self.land.ids, 'mean'] = mean
+        self.world[grain_yield].loc[self.land.ids, 'var'] = var
         return
-        # # TODO: this could be made better. Ideally we want to only access declared groups.
-        # # TODO: this is definitely an awkward way to do this. maybe system will automatically refresh after each function call?
-        # households = self.households.ids
-        # farm_ids = self.world[farmland].loc[households, 'id']
-        # harvests = self.calculate_yield(farm_ids)
-        # self.world.events.harvest(households, harvests)
-        # self.mutate_yield()
 
     def harvest(self, households, harvests):
-        # TODO: seems that stockpile requires a system just to manage its mutations
-        #   can I make that simpler?
         self.world[stockpile].loc[households, 'grain'] = np.clip(
             self.world[stockpile].loc[households, 'grain'] + harvests,
             0, self.max_grain_stock)

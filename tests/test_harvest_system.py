@@ -21,14 +21,13 @@ def test_system_updates_yield_yearly():
     sys = HarvestSystem(world, yield_data=data, rng=np.random.default_rng(0),
                         soil_quality_variance=soil_quality_variance,
                         harvest_variance=harvest_variance)
-    sys.initialize()
     pd.testing.assert_frame_equal(
         world[grain_yield],
         pd.DataFrame({'mean': expected_mean,
                       'var': harvest_variance * expected_mean}))
     sys.year_passes()
     oldmean = expected_mean
-    expected_mean = data[1].flatten() * soil_quality)
+    expected_mean = data[1].flatten() * soil_quality
 
     pd.testing.assert_frame_equal(
         world[grain_yield],

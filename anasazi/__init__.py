@@ -24,7 +24,7 @@ class HarvestSystem(System):
 
         self.rng = rng or np.random.default_rng()
         if yield_data is None:
-            yield_data = np.load(Path(__file__).parent / "yields 800-1349.npy")
+            yield_data = np.load(Path(__file__).parent.parent / "yields 800-1349.npy")
 
         soil_qualtity = 1 + (self.rng.normal(
             0, soil_quality_variance, size=yield_data.shape[1:]))
@@ -33,6 +33,7 @@ class HarvestSystem(System):
         self.harvest_variance = harvest_variance
         self.world.mapsize = yield_data[0].shape
         self._yield_index = None
+        self.initialize()
 
     @property
     def mean_this_year(self):

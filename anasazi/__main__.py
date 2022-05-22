@@ -17,6 +17,7 @@ YEARS_PER_SECOND = 5
 
 
 def initialize_households(world, n_households, initial_grain=1600):
+
     positions = np.array(
         [[x, y]
          for x in range(world.mapsize[0])
@@ -24,15 +25,9 @@ def initialize_households(world, n_households, initial_grain=1600):
     xy = positions[np.random.choice(range(len(positions)), n_households, replace=False)]
     grain = np.ones((n_households, )) * initial_grain
 
-    farmlands = world.add_entities(
-        {position: dict(x=np.zeros(xy[:, 0].shape) + np.nan,
-                        y=np.nan),
-         grain_yield: dict(mean=np.zeros(xy[:, 0].shape), std=0)})
-    # TODO: this is silly
     households_data = {position: dict(x=xy[:, 0], y=xy[:, 1]),
                        stockpile: dict(grain=grain),
-                       age: dict(age=np.zeros(grain.shape)),
-                       farmland: dict(id=farmlands)}
+                       age: dict(age=np.zeros(grain.shape))}
     households = world.add_entities(
         households_data)
     world.events.seek_new_farmland(households)
@@ -64,7 +59,6 @@ class YearSystem(System):
 #    or provided to world?
 
 
-
 class MovingSystem(System):
 
     # TODO: can have a maximum distance traveled to keep efficient
@@ -80,9 +74,10 @@ class MovingSystem(System):
 
     @property
     def habitable(self):
-        habitable = self.world.systems[HarvestSystem].yield_mean\
+        habitable = self.world[grain_yield].loc[self.farms.ids]\
             >= self.world.systems[EatingSystem].yearly_consumption
-        return habitable
+        return habitable.join(self.world[position].loc[self.farms.ids]).pivot(
+            index='x', columns='y', values='mean').values
 
     def harvest(self, households, harvest):
         need = self.world.systems[EatingSystem].yearly_consumption
@@ -231,7 +226,9 @@ class PlotSystem(System):
         ax = fig.gca()
         self.fig = fig
         self.ax = ax
-        im = ax.imshow(self._plot_soil_quality(), cmap='RdYlGn')
+
+        data = self._plot_soil_quality()
+        im = ax.imshow(data, cmap='RdYlGn')
         self._plot_households()
         fig.show()
         self.fig = fig
@@ -246,8 +243,10 @@ class PlotSystem(System):
             / 1500, c='b')
 
     def _plot_soil_quality(self):
-        data = self.world.systems[HarvestSystem].yield_mean.transpose()
-        return data
+        posns = self.world[position].loc[self.farms.ids]
+        yields = self.world[grain_yield].loc[self.farms.ids, 'mean']
+        return posns.join(yields).pivot(
+            index='y', columns='x', values='mean').values
 
     def draw(self):
         self.im.set(data=self._plot_soil_quality())
@@ -278,7 +277,7 @@ AgeSystem(world)
 MoveOutSystem(world)
 PlotSystem(world)
 
-initialize_households(world, 5)
+initialize_households(world, 200)
 
 
 prevt = time.time()
@@ -289,7 +288,7 @@ while True:
     prevt = currt
     if np.floor(world.systems[YearSystem].year) % 1 == 0:
         world.events.draw()
-        print("population:", world[position].shape[0])
+        print("population:", world[stockpile].shape[0])
         fields = np.zeros(world.mapsize)
 
 

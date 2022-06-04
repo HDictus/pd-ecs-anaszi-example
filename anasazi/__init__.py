@@ -39,7 +39,6 @@ class HarvestSystem(System):
     def mean_this_year(self):
         if self._yield_index is None:
             self._yield_index = 0
-        print(self._yield_index)
         return self.yield_mean_by_year[self._yield_index]
 
     def initialize(self):
@@ -53,7 +52,6 @@ class HarvestSystem(System):
             y.append(j)
             mean.append(mn)
             var.append(mn * self.harvest_variance)
-
         self.world.add_entities(
             {grain_yield: dict(mean=mean,
                                var=var),
@@ -69,10 +67,15 @@ class HarvestSystem(System):
         var = self.harvest_variance * mean
         self.world[grain_yield].loc[self.land.ids, 'mean'] = mean
         self.world[grain_yield].loc[self.land.ids, 'var'] = var
-        return
+        farm_ids = self.world[farmland].loc[self.households.ids, 'id'].values
+
+        yields = self.world[grain_yield].loc[farm_ids]
+        harvest = self.rng.normal(yields['mean'], yields['var'])
+        self.world.events.harvest(self.households.ids, harvest)
 
     def harvest(self, households, harvests):
         self.world[stockpile].loc[households, 'grain'] = np.clip(
             self.world[stockpile].loc[households, 'grain'] + harvests,
             0, self.max_grain_stock)
+        print(self.world[stockpile])
         return

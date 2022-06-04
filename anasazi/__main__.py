@@ -288,7 +288,7 @@ while True:
     prevt = currt
     if np.floor(world.systems[YearSystem].year) % 1 == 0:
         world.events.draw()
-        print("population:", world[stockpile].shape[0])
+        print("population:", world[stockpile].shape[0], world[stockpile].mean())
         fields = np.zeros(world.mapsize)
 
 

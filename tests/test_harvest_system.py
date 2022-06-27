@@ -49,8 +49,8 @@ def test_system_calls_harvest_event():
         stockpile: dict(grain=0),
         farmland: dict(id=[0, 1, 2, 3, 4])})
     sys.year_passes()
-    rng = np.random.default_rng(0)
     yields = world[grain_yield].loc[[0, 1, 2, 3, 4]]
-    world.events.harvest.assert_called_with(
-        hhlds,
-        yields['mean'])
+
+    arg1, arg2 = world.events.harvest.mock_calls[0].args
+    assert np.allclose(arg1, hhlds)
+    assert np.allclose(arg2, yields['mean'])

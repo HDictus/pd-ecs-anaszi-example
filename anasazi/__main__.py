@@ -1,28 +1,49 @@
 from pd_ecs import World, System, Component
 import numpy as np
-
+from anasazi import position, grain_yield, stockpile, farmland, HarvestSystem
 # for now we just do farming on a random map with random changes
 
-YEARS_PER_SECOND = 100
+YEARS_PER_SECOND = 5
 
-position = Component("X", "Y")
-grain_stockpile = Component("grain")
 
-def initalize_households(world, n_households, initial_grain=20):
-    x = np.random.choice(range(world.mapsize[0]), n_households, replace=False)
-    y = np.random.choice(range(world.mapsize[1]), n_households, replace=False)
+# TODO: technically the map data should not be attached to a system, but
+#    should be an entity somehow
+# TODO: better as kwargs name: type?
+# TODO: are we sure farmland should be its own entity?
+#   it is removed when a household is removed
+# TODO: test-driven refactoring is very important
+
+
+
+
+def initialize_households(world, n_households, initial_grain=1600):
+
+    positions = np.array(
+        [[x, y]
+         for x in range(world.mapsize[0])
+         for y in range(world.mapsize[1])])
+    xy = positions[np.random.choice(range(len(positions)), n_households, replace=False)]
     grain = np.ones((n_households, )) * initial_grain
-    world.add_entiies(position=dict(x=x, y=y), grain_stockpile=dict(grain))
+
+    households_data = {position: dict(x=xy[:, 0], y=xy[:, 1]),
+                       stockpile: dict(grain=grain),
+                       age: dict(age=np.zeros(grain.shape))}
+    households = world.add_entities(
+        households_data)
+    world.events.seek_new_farmland(households)
     return
 
 
 class YearSystem(System):
     time = 0
-    seconds_to_years = YEARS_PER_SECOND
+
+    def __init__(self, world, start_year=800):
+        self.time = start_year / YEARS_PER_SECOND
+        super().__init__(world)
 
     @property
     def year(self):
-        return self.time * self.seconds_to_years
+        return self.time * YEARS_PER_SECOND
 
     def update(self, dt):
         yearbefore = int(np.floor(self.year))
@@ -32,50 +53,243 @@ class YearSystem(System):
             self.world.events.year_passes()
 
 
-class HarvestSystem(System):
+# TODO: consider systems in isolation, for the needed parameters, what are they to that system?
+#    where should they come from?
+#    e.g. globals provided at init...
+#    or provided to world?
 
-    households = [position, grain_stockpile]
 
-    def __init__(self, world):
-        super().__init__(self)
-        self.yield_mean = np.random.uniform(0, 10, size=world.mapsize)
-        self.yield_std = np.random.uniform(0, 5, size=world.mapsize)
+class MovingSystem(System):
 
-    def calculate_yield(self, x, y):
-        means = self.yield_mean[x, y]
-        std = self.yield_std[x, y]
-        actual = np.random.normal(means, stds)
-        actual[actual < 0] = 0
-        return actual
+    # TODO: can have a maximum distance traveled to keep efficient
+    filters=dict(households = [position, stockpile, farmland],
+                 farms=[position, grain_yield])
 
-    def year_passes(self):
-        households = self.households
-        harvests = self.calculate_yield(households[position.X], households[position.Y])
-        self.households[grain_stockpile.grain] += harvests
+    @property
+    def occupied(self):
+        occ = np.zeros(self.world.mapsize, dtype=bool)
+        posns = np.int32(self.world[position].loc[self.households.ids].values)
+        occ[posns[:, 0], posns[:, 1]] = True
+        return occ
+
+    @property
+    def habitable(self):
+        habitable = self.world[grain_yield].loc[self.farms.ids]\
+            >= self.world.systems[EatingSystem].yearly_consumption
+        return habitable.join(self.world[position].loc[self.farms.ids]).pivot(
+            index='x', columns='y', values='mean').values
+
+    def harvest(self, households, harvest):
+        need = self.world.systems[EatingSystem].yearly_consumption
+
+        expectation = harvest
+        grain = self.world[stockpile].loc[households, 'grain']
+        harvest_needed = need - grain
+        moving = expectation < harvest_needed
+        moving_households = households[moving]
+        if len(moving_households) > 0:
+            self.world.events.seek_new_farmland(moving_households)
+
+    def seek_new_farmland(self, moving_households):
+        new_positions, success, homeless = self.new_farmlands(
+            moving_households)
+        self.world.remove_entities(homeless)
+
+        self.world.events.farms_move(success, new_positions)
+
+    def new_farmlands(self, moving_households):
+        available_farmland = list(np.transpose(np.nonzero(
+            np.logical_and(~self.occupied, self.habitable))))
+        positions = self.world[position].loc[moving_households].values
+        moving = []
+        homeless = []
+        newplaces = []
+        for household, posn in zip(moving_households, positions):
+            if len(available_farmland) == 0:
+                homeless.append(household)
+                continue
+            index = nearest(posn, np.array(available_farmland))
+            moving.append(household)
+            newplaces.append(available_farmland.pop(index))
+        return newplaces, moving, homeless
+
+    def farms_move(self, movers, new_positions):
+        if movers:
+            self.world[position].loc[movers] = np.array(new_positions)
         return
+
+
+def nearest(position, farmland):
+    # print(position, farmland, '?????????????')
+    dists = np.linalg.norm(position - farmland, axis=1)
+    return np.argmin(dists)
+
+
 
 class EatingSystem(System):
 
-    households = [position, grain_stockpile]
+    filters = dict(households = [position, stockpile])
 
-    food_requirement = 0.5 * YEARS_PER_SECOND
+    yearly_consumption = 160 * 5  # 160 kg of grain p.p., avg 5 per household
 
-    def update(dt):
-        self.households.grain_stockpile.grain -= food_requirement * dt
-
-world = World()
-world.mapsize = (100, 100)
-
-EatingSystem(world)
-HarvestSystem(world)
-
-initialize_households(world)
+    def year_passes(self):
+        current_stockpile = self.world[stockpile].loc[self.households.ids, 'grain']
+        new_stockpile = current_stockpile - self.yearly_consumption
+        starving = current_stockpile.index[new_stockpile < 0]
+        self.world[stockpile].loc[self.households.ids, 'grain'] = new_stockpile
+        self.world.remove_entities(starving)
 
 
 import time
+import matplotlib.pyplot as plt
 
-prevt = time.clock()
+
+# class DeathSystem(System):
+
+#     return
+
+
+age = Component("age")
+
+
+class AgeSystem(System):
+
+    filters = dict(ages=[age],
+                   households=[age, stockpile])
+
+    move_out_age = 16
+
+    # TODO: fertility, fertility ends age
+    death_age = 40
+    fertility = 0.155  # chance of having a baby each year
+
+    def year_passes(self):
+        """
+        Assumptions:
+           each household has one child each year after it is established
+           every child moves out at 16 years of age
+           the child establishes their own household (asexual reproduction)
+           every household provides one third of its corn stockpile to the child
+           every household dies after exactly 40 years of existing
+        # TODO: these various things do not belong in the same system
+        #  I would say: fertility age, death age are managed here
+        """
+
+        aging_entities = self.ages.ids
+        self.world[age].loc[aging_entities, 'age'] += 1
+        # TODO: there has to be a way to make the below smoother
+        # it shouldn't belong to agesystem
+        households = self.households.ids
+        moving_out = np.logical_and(
+            np.random.uniform(0, 1, size=len(households)) < self.fertility,
+            self.world[age].loc[households, 'age'] >= self.move_out_age)
+            # self.world[age].loc[households, 'age'] >= self.move_out_age
+        # moveout = np.random.uniform(0, 1, size=moving_out) >
+        moving_out_ids = self.world[age].loc[households].index[moving_out]
+
+        self.world.events.children_move_out(moving_out_ids)
+        too_old = self.world[age].loc[aging_entities, 'age'] >= self.death_age
+        too_old_ids = self.world[age].loc[aging_entities].index[too_old]
+        self.world.events.death(too_old_ids)
+
+    def death(self, dying):
+        self.world.remove_entities(dying)
+
+
+class MoveOutSystem(System):
+
+    stockpile_gift_fraction = 0.33333
+
+    # TODO: what is actually the best way to handle the creation of new entities?
+    #   there may be aspects of a particular type of entity which are determined
+    #   independent of any single system...
+    def children_move_out(self, moving_out_ids):
+        gift = self.world[stockpile].loc[moving_out_ids, 'grain']\
+            * self.stockpile_gift_fraction
+        self.world[stockpile].loc[moving_out_ids, 'grain'] -= gift
+        newdata = {position: self.world[position].loc[moving_out_ids],
+                   stockpile: dict(grain=gift),
+                   age: dict(age=np.zeros(gift.shape))}
+        new = world.add_entities(newdata)
+
+        self.world.events.seek_new_farmland(new)
+
+
+class PlotSystem(System):
+
+    filters = dict(households=[position, stockpile],
+                   farms=[position, grain_yield])
+
+    def __init__(self, world):
+        super().__init__(world)
+        fig = plt.figure()
+        ax = fig.gca()
+        self.fig = fig
+        self.ax = ax
+
+        data = self._plot_soil_quality()
+        im = ax.imshow(data, cmap='RdYlGn')
+        self._plot_households()
+        fig.show()
+        self.fig = fig
+        self.ax = ax
+        self.im = im
+
+    def _plot_households(self):
+        self.scatter = self.ax.scatter(
+            x=world[position].loc[self.households.ids].x,
+            y=world[position].loc[self.households.ids].y,
+            s=world[stockpile].loc[self.households.ids].grain
+            / 1500, c='b')
+
+    def _plot_soil_quality(self):
+        posns = self.world[position].loc[self.farms.ids]
+        yields = self.world[grain_yield].loc[self.farms.ids, 'mean']
+        return posns.join(yields).pivot(
+            index='y', columns='x', values='mean').values
+
+    def draw(self):
+        self.im.set(data=self._plot_soil_quality())
+        self.scatter.remove()
+        self._plot_households()
+        # scatter.set_offsets(np.concatenate([x, y], axis=1))
+        # scatter.set_sizes(world.components.stockpile.grain)
+        self.ax.set_title(str(world.systems[YearSystem].year))
+        self.fig.canvas.draw_idle()
+        self.fig.canvas.flush_events()
+
+
+
+
+# TODO: best practices for proper separatiion between systems
+
+
+# some duplication here... can we just declare components as Component(name, *things/**things:type)?
+
+world = World(position, stockpile, age, grain_yield, farmland)
+world.mapsize = (80, 120)
+
+YearSystem(world)
+HarvestSystem(world)
+EatingSystem(world)
+MovingSystem(world)
+AgeSystem(world)
+MoveOutSystem(world)
+PlotSystem(world)
+
+initialize_households(world, 200)
+
+
+prevt = time.time()
+initt = prevt
 while True:
-    currt = time.clock()
-    world.update(currt-prevt)
-    prevt = currtg
+    currt = time.time()
+    world.events.update(currt - prevt)
+    prevt = currt
+    if np.floor(world.systems[YearSystem].year) % 1 == 0:
+        world.events.draw()
+        print("population:", world[stockpile].shape[0], world[stockpile].mean())
+        fields = np.zeros(world.mapsize)
+
+
+# TODO: parameterize step size

@@ -125,21 +125,6 @@ def nearest(position, farmland):
     return np.argmin(dists)
 
 
-
-class EatingSystem(System):
-
-    filters = dict(households = [position, stockpile])
-
-    yearly_consumption = 160 * 5  # 160 kg of grain p.p., avg 5 per household
-
-    def year_passes(self):
-        current_stockpile = self.world[stockpile].loc[self.households.ids, 'grain']
-        new_stockpile = current_stockpile - self.yearly_consumption
-        starving = current_stockpile.index[new_stockpile < 0]
-        self.world[stockpile].loc[self.households.ids, 'grain'] = new_stockpile
-        self.world.remove_entities(starving)
-
-
 import time
 import matplotlib.pyplot as plt
 

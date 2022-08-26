@@ -65,17 +65,34 @@ class HarvestSystem(System):
         self._yield_index += 1
         mean = self.mean_this_year.flatten()
         var = self.harvest_variance * mean
-        self.world[grain_yield].loc[self.land.index, 'mean'] = mean
-        self.world[grain_yield].loc[self.land.index, 'var'] = var
-        farm_ids = self.world[farmland].loc[self.households.index, 'id'].values
-
-        yields = self.world[grain_yield].loc[farm_ids]
+        land = self.land[grain_yield]
+        land['mean'] = mean
+        land['var'] = var
+        farm_ids = self.households[farmland]['id']
+        yields = land.loc[farm_ids]
         harvest = self.rng.normal(yields['mean'], yields['var'])
-        self.world.events.harvest(self.households.index, harvest)
+        self.world.events.harvest(self.households.ids, harvest)
+        self.world.update({grain_yield: land})
 
     def harvest(self, households, harvests):
         self.world[stockpile].loc[households, 'grain'] = np.clip(
             self.world[stockpile].loc[households, 'grain'] + harvests,
             0, self.max_grain_stock)
-        print(self.world[stockpile])
         return
+
+
+KG_GRAIN_PER_YEAR = 160 * 5  # 160kg grain per year, household avg of 5 people
+
+
+class EatingSystem(System):
+
+    filters = dict(households=[stockpile])
+
+    def __init__(self, world, yearly_grain=KG_GRAIN_PER_YEAR):
+        super().__init__(world)
+        self.yearly_grain = yearly_grain
+
+    def year_passes(self):
+        stockpiles = self.households[stockpile]
+        stockpiles['grain'] -= self.yearly_grain
+        self.world.update({stockpile: stockpiles})

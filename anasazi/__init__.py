@@ -3,10 +3,12 @@ from pathlib import Path
 import pandas as pd
 from pd_ecs import Component, System
 
-position = Component("x", "y")
-grain_yield = Component('mean', 'var')
-stockpile = Component("grain")
-farmland = Component('id')
+position = Component("x", "y", name='position')
+grain_yield = Component('mean', 'var', name='yield')
+food_needs = Component('grain', name='yearly food needed (Kg corn)')
+stockpile = Component("grain", name='stockpile')
+farmland = Component('id', name='farmland')
+occupying_farms = Component('num occupants')
 
 
 class HarvestSystem(System):
@@ -96,3 +98,36 @@ class EatingSystem(System):
         stockpiles = self.households[stockpile]
         stockpiles['grain'] -= self.yearly_grain
         self.world.update({stockpile: stockpiles})
+
+
+class MovingSystem(System):
+
+    filters = dict(arable_land=[position, grain_yield, occupying_farms])
+
+
+    def harvest(self, ids, amount):
+        ids = np.array(ids)
+        expected_next_year = amount + self.world[stockpile].loc[ids, 'grain']
+        expects_to_starve = ids[
+            self.world[food_needs].loc[ids, 'grain'] > expected_next_year]
+        self.world.events.find_home(expects_to_starve)
+
+    def find_home(self, ids):
+        positions, yields, occupation = self.arable_land.data()
+        mover_positions = self.world[position].loc[ids]
+        mover_needs = self.world[food_needs].loc[ids]
+        unoccupied = (occupation['num occupants'] == 0)
+        positions = positions[unoccupied]
+        yields = yields[unoccupied]
+        displacements = (
+            positions.values[np.newaxis, ...]
+            - mover_positions.values[..., np.newaxis, :]
+        )
+        distances = np.linalg.norm(displacements, axis=-1)
+        enough_to_survive = (
+            yields['mean'].values[np.newaxis, ...]
+            >= mover_needs['grain'].values[..., np.newaxis]
+        )
+        distances[~enough_to_survive] = np.inf
+        nearest = positions.iloc[np.argmin(distances, axis=1)].index
+        self.world.give(ids, {farmland: {'id': nearest}})

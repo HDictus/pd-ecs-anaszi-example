@@ -9,6 +9,7 @@ food_needs = Component('grain', name='yearly food needed (Kg corn)')
 stockpile = Component("grain", name='stockpile')
 farmland = Component('id', name='farmland')
 occupying_farms = Component('num occupants')
+occupying_houses = Component('num occupants')
 
 
 class HarvestSystem(System):
@@ -102,21 +103,30 @@ class EatingSystem(System):
 
 class MovingSystem(System):
 
-    filters = dict(arable_land=[position, grain_yield, occupying_farms])
-
+    # TODO: maybe it would be cleaner to have only occupied land have the
+    # occupying farms and occupying houses components, and so we can
+    # just ~ them in the filter.
+    # would need a new component: is_land
+    filters = dict(arable_land=[position, grain_yield, occupying_farms,
+                                occupying_houses],
+                   potential_housing=[position, occupying_houses,
+                                      occupying_farms])
 
     def harvest(self, ids, amount):
         ids = np.array(ids)
         expected_next_year = amount + self.world[stockpile].loc[ids, 'grain']
         expects_to_starve = ids[
             self.world[food_needs].loc[ids, 'grain'] > expected_next_year]
+
         self.world.events.find_home(expects_to_starve)
 
     def find_home(self, ids):
-        positions, yields, occupation = self.arable_land.data()
+        positions, yields, occupation, houses = self.arable_land.data()
         mover_positions = self.world[position].loc[ids]
         mover_needs = self.world[food_needs].loc[ids]
-        unoccupied = (occupation['num occupants'] == 0)
+        unoccupied = np.logical_and(
+            occupation['num occupants'] == 0,
+            houses['num occupants'] == 0)
         positions = positions[unoccupied]
         yields = yields[unoccupied]
         displacements = (
@@ -129,5 +139,31 @@ class MovingSystem(System):
             >= mover_needs['grain'].values[..., np.newaxis]
         )
         distances[~enough_to_survive] = np.inf
-        nearest = positions.iloc[np.argmin(distances, axis=1)].index
-        self.world.give(ids, {farmland: {'id': nearest}})
+        nearest_farms = []
+        for dist in distances:
+            nearest = np.argmin(dist)
+            distances[:, nearest] = np.inf
+            nearest_farms.append(positions.index[nearest])
+
+        self.world.give(ids, {farmland: {'id': nearest_farms}})
+
+        self.world[occupying_farms].loc[nearest_farms] += 1
+        # TODO: there is a repeated operation here I should abstract away
+        # TODO: should there maybe be a filter???
+
+        house_posns, occupants, farmed = self.potential_housing.data()
+        potential_house_positions = house_posns[farmed['num occupants'] == 0]
+
+        house_to_farm_distance = np.linalg.norm(
+            potential_house_positions.values[np.newaxis, ...]
+            - positions.loc[nearest_farms].values[..., np.newaxis, :],
+            axis=-1
+        )
+        print(house_to_farm_distance)
+        houses = potential_house_positions.iloc[
+            np.argmin(house_to_farm_distance, axis=1)]
+        self.world[position].loc[ids] = houses.values
+        house_ids, nhouses = np.unique(houses.index, return_counts=True)
+
+        print(house_ids, nhouses)
+        self.world[occupying_houses].loc[house_ids] += nhouses

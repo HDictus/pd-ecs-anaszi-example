@@ -12,6 +12,9 @@ home = Component('id', name='home')
 occupying_farms = Component('num occupants')
 occupying_houses = Component('num occupants')
 
+comps = (position, grain_yield, food_needs, stockpile, farmland,
+         home, occupying_farms, occupying_houses)
+
 
 class HarvestSystem(System):
 
@@ -118,6 +121,8 @@ class MovingSystem(System):
         expected_next_year = amount + self.world[stockpile].loc[ids, 'grain']
         expects_to_starve = ids[
             self.world[food_needs].loc[ids, 'grain'] > expected_next_year]
+        if len(expects_to_starve) == 0:
+            return
         self.world.events.move_out(expects_to_starve)
         self.world.events.find_home(expects_to_starve)
 
@@ -178,3 +183,18 @@ class MovingSystem(System):
             farms.values
         self.world[occupying_houses].loc[homes.index, 'num occupants'] -=\
             homes.values
+
+
+class YearSystem(System):
+
+    def __init__(self, world):
+        super().__init__(world)
+        self.year = 800
+        self.intyear = self.year
+
+    def update(self, dt):
+        print(dt)
+        self.year += dt
+        while self.intyear < self.year:
+            self.intyear += 1
+            self.world.events.year_passes()

@@ -8,6 +8,7 @@ grain_yield = Component('mean', 'var', name='yield')
 food_needs = Component('grain', name='yearly food needed (Kg corn)')
 stockpile = Component("grain", name='stockpile')
 farmland = Component('id', name='farmland')
+home = Component('id', name='home')
 occupying_farms = Component('num occupants')
 occupying_houses = Component('num occupants')
 
@@ -167,3 +168,11 @@ class MovingSystem(System):
         house_ids, nhouses = np.unique(houses.index, return_counts=True)
 
         self.world[occupying_houses].loc[house_ids] += nhouses
+
+    def move_out(self, ids):
+        farms = self.world[farmland].loc[ids, 'id'].value_counts()
+        homes = self.world[home].loc[ids, 'id'].value_counts()
+        self.world[occupying_farms].loc[farms.index, 'num occupants'] -=\
+            farms.values
+        self.world[occupying_houses].loc[homes.index, 'num occupants'] -=\
+            homes.values

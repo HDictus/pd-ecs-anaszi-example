@@ -21,6 +21,8 @@ def test_moves_after_small_harvest():
     arg1, = world.events.find_home.mock_calls[0].args
     assert (arg1 == [0, 1]).all()
 
+# TODO: test move_out and then find_home called
+# TODO: test move_out event
 
 def test_moves_to_nearest_habitable_unoccupied():
     """
@@ -50,3 +52,6 @@ def test_moves_to_nearest_habitable_unoccupied():
     print(world[occupying_farms].values)
     assert np.allclose(world[occupying_houses].values[:, 0], [0, 2, 0, 0, 2])
     assert np.allclose(world[occupying_farms].values[:, 0], [1, 0, 1, 1, 0])
+
+# TODO: test move_in event is called
+# TODO: test move_in event

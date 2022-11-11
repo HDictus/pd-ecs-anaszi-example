@@ -141,6 +141,8 @@ class MovingSystem(System):
         distances[~enough_to_survive] = np.inf
         nearest_farms = []
         for dist in distances:
+            if not np.isfinite(dist).any():
+                assert False, "lol, TODO"
             nearest = np.argmin(dist)
             distances[:, nearest] = np.inf
             nearest_farms.append(positions.index[nearest])
@@ -159,11 +161,9 @@ class MovingSystem(System):
             - positions.loc[nearest_farms].values[..., np.newaxis, :],
             axis=-1
         )
-        print(house_to_farm_distance)
         houses = potential_house_positions.iloc[
             np.argmin(house_to_farm_distance, axis=1)]
         self.world[position].loc[ids] = houses.values
         house_ids, nhouses = np.unique(houses.index, return_counts=True)
 
-        print(house_ids, nhouses)
         self.world[occupying_houses].loc[house_ids] += nhouses

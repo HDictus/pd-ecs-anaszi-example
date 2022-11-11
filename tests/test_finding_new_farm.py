@@ -60,6 +60,7 @@ def test_moves_to_nearest_habitable_unoccupied():
     """
     world = World(*comps)
     ms = MovingSystem(world)
+    world.events.move_in = MagicMock()
     households = world.add_entities({
         position: {'x': [0, 0], 'y': [100, 100]},
         food_needs: {'grain': [1, 1]}})
@@ -69,10 +70,34 @@ def test_moves_to_nearest_habitable_unoccupied():
         occupying_houses: {'num occupants': [0, 0, 0, 0, 2]},
         grain_yield: {'mean': [1.0, 0.5, 1.0, 1.0, 1.0]}})
     world.events.find_home(households)
+    outs, farms = world.events.move_in.mock_calls[0].args
+    assert outs == households
+    assert farms == [lands[2], lands[3]]
 
+# TODO: perhaps housing and farming should be separate systems
+
+
+def test_move_in_occupies_new_places():
+    world = World(*comps)
+    ms = MovingSystem(world)
+    households = world.add_entities({
+        position: {'x': [0, 0], 'y': [100, 100]},
+        food_needs: {'grain': [1, 1]}})
+
+    lands = world.add_entities({
+        position: {'x': [0, 0, 0, 0, 0], 'y': [110, 115, 120, 125, 105]},
+        occupying_farms: {'num occupants': [1, 0, 0, 0, 0]},
+        occupying_houses: {'num occupants': [0, 0, 0, 0, 2]},
+        grain_yield: {'mean': [1.0, 0.5, 1.0, 1.0, 1.0]}})
+
+    world.events.move_in(households,
+                         [lands[2], lands[3]])
     assert np.allclose(world[farmland].loc[households, 'id'].values,
                        [lands[2], lands[3]])
+    assert np.allclose(world[home].loc[households, 'id'].values,
+                       [lands[1], lands[1]])
     assert np.allclose(world[position].loc[households], [[0, 115], [0, 115]])
+
     assert np.allclose(world[occupying_houses].values[:, 0], [0, 2, 0, 0, 2])
     assert np.allclose(world[occupying_farms].values[:, 0], [1, 0, 1, 1, 0])
 

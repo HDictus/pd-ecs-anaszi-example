@@ -148,30 +148,32 @@ class MovingSystem(System):
             distances[:, nearest] = np.inf
             nearest_farms.append(positions.index[nearest])
 
-        self.world.give(ids, {farmland: {'id': nearest_farms}})
+        self.world.events.move_in(ids, nearest_farms)
 
-        self.world[occupying_farms].loc[nearest_farms] += 1
+    def move_in(self, households, into_farms):
+        self.world.give(households, {farmland: {'id': into_farms}})
+        self.world[occupying_farms].loc[into_farms] += 1
         # TODO: there is a repeated operation here I should abstract away
         # TODO: should there maybe be a filter???
-
+        positions = self.arable_land[position]
         house_posns, occupants, farmed = self.potential_housing.data()
         potential_house_positions = house_posns[farmed['num occupants'] == 0]
 
         house_to_farm_distance = np.linalg.norm(
             potential_house_positions.values[np.newaxis, ...]
-            - positions.loc[nearest_farms].values[..., np.newaxis, :],
+            - positions.loc[into_farms].values[..., np.newaxis, :],
             axis=-1
         )
         houses = potential_house_positions.iloc[
             np.argmin(house_to_farm_distance, axis=1)]
-        self.world[position].loc[ids] = houses.values
+        self.world[position].loc[households] = houses.values
         house_ids, nhouses = np.unique(houses.index, return_counts=True)
-
+        self.world.give(households, {home: {'id': house_ids}})
         self.world[occupying_houses].loc[house_ids] += nhouses
 
-    def move_out(self, ids):
-        farms = self.world[farmland].loc[ids, 'id'].value_counts()
-        homes = self.world[home].loc[ids, 'id'].value_counts()
+    def move_out(self, households):
+        farms = self.world[farmland].loc[households, 'id'].value_counts()
+        homes = self.world[home].loc[households, 'id'].value_counts()
         self.world[occupying_farms].loc[farms.index, 'num occupants'] -=\
             farms.values
         self.world[occupying_houses].loc[homes.index, 'num occupants'] -=\

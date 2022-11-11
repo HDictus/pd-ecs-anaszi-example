@@ -118,7 +118,7 @@ class MovingSystem(System):
         expected_next_year = amount + self.world[stockpile].loc[ids, 'grain']
         expects_to_starve = ids[
             self.world[food_needs].loc[ids, 'grain'] > expected_next_year]
-
+        self.world.events.move_out(expects_to_starve)
         self.world.events.find_home(expects_to_starve)
 
     def find_home(self, ids):

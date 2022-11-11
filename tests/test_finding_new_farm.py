@@ -17,11 +17,14 @@ comps = (stockpile, food_needs, position,
 def test_moves_after_small_harvest():
     world = World(*comps)
     world.events.find_home = MagicMock()
+    world.events.move_out = MagicMock()
     ms = MovingSystem(world)
     households = world.add_entities({
         stockpile: {'grain': [1, 2, 3, 1]},
         food_needs: {'grain': [2.5, 2.5, 2.5, 2.5]}})
     world.events.harvest(households, [1, 0.1, 0, 2.0])
+    arg0, = world.events.move_out.mock_calls[0].args
+    assert (arg0 == [0, 1]).all()
     arg1, = world.events.find_home.mock_calls[0].args
     assert (arg1 == [0, 1]).all()
 

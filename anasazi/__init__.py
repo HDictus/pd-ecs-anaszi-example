@@ -16,6 +16,9 @@ comps = (position, grain_yield, food_needs, stockpile, farmland,
          home, occupying_farms, occupying_houses)
 
 
+# TODO: add event to initialize farmland
+# TODO: handle nowhere to live situation
+
 class HarvestSystem(System):
 
     filters = dict(households=[position, stockpile, farmland],

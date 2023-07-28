@@ -1,12 +1,12 @@
 import numpy as np
 from pd_ecs import World
+import pandas as pd
 from mock import MagicMock
 from anasazi.components import position, stockpile, food_needs, grain_yield, \
-    occupying_farms, farmland, occupying_houses, home
-
+    occupying_farms, farmland, occupying_houses, home, moving
+from anasazi import stock_taking
 
 # TODO: adding a component to a world should be implicit when you add an entity or system with the component
-
 # TODO: should also test that when we move entities they unoccupy their old farm
 comps = (stockpile, food_needs, position,
          occupying_farms, farmland, grain_yield,
@@ -14,29 +14,22 @@ comps = (stockpile, food_needs, position,
 
 
 def test_moves_after_small_harvest():
-    world = World(*comps)
-    world.events.find_home = MagicMock()
-    world.events.move_out = MagicMock()
-    ms = MovingSystem(world)
+    world = World()
     households = world.add_entities({
-        stockpile: {'grain': [1, 2, 3, 1]},
+        stockpile: {'grain': [1, 2, 3, 2]},
         food_needs: {'grain': [2.5, 2.5, 2.5, 2.5]}})
-    world.events.harvest(households, [1, 0.1, 0, 2.0])
-    arg0, = world.events.move_out.mock_calls[0].args
-    assert (arg0 == [0, 1]).all()
-    arg1, = world.events.find_home.mock_calls[0].args
-    assert (arg1 == [0, 1]).all()
+    stock_taking(world, pd.Series([1, 1, 0, 0], index=households))
+    assert all(world[moving].index == [0, 3])
 
 
 def test_move_out_unoccupies_house_and_farm():
-    world = World(*comps)
+    world = World()
     land = np.array(world.add_entities({
         position: {'x': [1, 2, 3, 4, 5, 6, 7, 8], 'y': [4, 5,  5, 6, 7, 8, 9, 10]},
         occupying_farms: {'num occupants': [1, 0, 1, 0, 1, 1, 1, 0]},
         occupying_houses: {'num occupants': [0, 1, 0, 2, 0, 0, 0, 2]}}))
     farmers = world.add_entities({home: {'id': land[[1, 3, 3, 7, 7]]},
                                   farmland: {'id': land[[0, 2, 4, 5, 6]]}})
-    ms = MovingSystem(world)
     world.events.move_out(farmers[:-1])
     print(world[occupying_farms]['num occupants'])
     assert np.allclose(world[occupying_farms]['num occupants'], [
@@ -57,8 +50,7 @@ def test_moves_to_nearest_habitable_unoccupied():
 
     When multiple households move, the first in the list gets priority.
     """
-    world = World(*comps)
-    ms = MovingSystem(world)
+    world = World()
     world.events.move_in = MagicMock()
     households = world.add_entities({
         position: {'x': [0, 0], 'y': [100, 100]},
@@ -77,8 +69,7 @@ def test_moves_to_nearest_habitable_unoccupied():
 
 
 def test_move_in_occupies_new_places():
-    world = World(*comps)
-    ms = MovingSystem(world)
+    world = World()
     households = world.add_entities({
         position: {'x': [0, 0], 'y': [100, 100]},
         food_needs: {'grain': [1, 1]}})

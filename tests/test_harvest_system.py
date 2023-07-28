@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 from pd_ecs import World
-from anasazi import harvest
+from anasazi import harvest_grain
 from anasazi.components import position, grain_yield, stockpile, farmland
 from mock import MagicMock
 
@@ -18,6 +18,6 @@ def test_harvest():
 
     oldnorm = np.random.normal
     np.random.normal = mock_norm
-    harvest(world, max_grain_stock=250)
+    harvest_grain(world, max_grain_stock=250)
     np.random.normal = oldnorm
     assert np.allclose(world[stockpile]['grain'].values, [125, 250, 60])

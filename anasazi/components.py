@@ -9,6 +9,4 @@ farmland = Component('id', name='farmland')
 home = Component('id', name='home')
 occupying_farms = Component('num occupants')
 occupying_houses = Component('num occupants')
-
-comps = (position, grain_yield, food_needs, stockpile, farmland,
-         home, occupying_farms, occupying_houses)
+moving = Component("to_id", name="moving")

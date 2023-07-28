@@ -18,6 +18,6 @@ def test_harvest():
 
     oldnorm = np.random.normal
     np.random.normal = mock_norm
-    harvest(world, max_grain_stock=1000)
+    harvest(world, max_grain_stock=250)
     np.random.normal = oldnorm
-    assert np.allclose(world[stockpile]['grain'].values, [125, 275, 60])
+    assert np.allclose(world[stockpile]['grain'].values, [125, 250, 60])

@@ -13,7 +13,7 @@ if sys.version_info < (3, 6):
 with open("README.rst", encoding="utf-8") as f:
     README = f.read()
 
-VERSION = imp.load_source("", "pd_ecs/version.py").__version__
+VERSION = imp.load_source("", "anasazi/version.py").__version__
 
 print(find_packages)
 

@@ -1,8 +1,7 @@
 import numpy as np
-from anasazi import MovingSystem
 from pd_ecs import World
 from mock import MagicMock
-from anasazi import position, stockpile, food_needs, grain_yield, \
+from anasazi.components import position, stockpile, food_needs, grain_yield, \
     occupying_farms, farmland, occupying_houses, home
 
 

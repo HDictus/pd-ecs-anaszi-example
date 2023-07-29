@@ -2,7 +2,10 @@
 from pd_ecs import Component
 
 position = Component("x", "y", name='position')
+# we need to add something to change these things on the fly...
+# for isntance from var to cv.
 grain_yield = Component('mean', 'var', name='yield')
+time = Component('year', 'month', 'day', name='year')
 food_needs = Component('grain', name='yearly food needed (Kg corn)')
 stockpile = Component("grain", name='stockpile')
 farmland = Component('id', name='farmland')

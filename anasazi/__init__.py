@@ -146,3 +146,37 @@ def moving_house(world):
     ]
     ids, farms = _find_home(position, needs, arable_land)
     _move_in(world, ids, farms, world[comp.position])
+
+
+def load_terrain(terrain_file, min_year, soil_quality_variance=0.2, coeff_var=0.2):
+    terrain_array = np.load(terrain_file)
+    dat = []
+    for (t, x, y), val in np.ndenumerate(terrain_array):
+        dat.append({'year': t + min_year, 'x': x, 'y': y, 'mean': val})
+    terrain_data = pd.DataFrame(dat)
+    patches = [(x, y) for (x, y), _ in terrain_data.groupby(['x', 'y'])]
+    soil_quality = np.random.normal(1, soil_quality_variance, size=len(patches))
+    terrain_data = terrain_data.set_index(['x', 'y'])
+    for patch, quality in zip(patches, soil_quality):
+        terrain_data.loc[patch, 'mean'] *= quality
+
+    terrain_data['var'] = terrain_data['mean'] * coeff_var
+    return terrain_data.reset_index()
+
+
+def _get_terrain_this_year(world, terrain_data):
+    # we should probably have a better way to deal with global vars...
+    year = world[comp.time].iloc[0].year
+    this_year = terrain_data.set_index('year').loc[year].reset_index()
+    return {
+        comp.grain_yield: this_year[['mean', 'var']],
+        comp.position: this_year[['x', 'y']]
+    }
+
+
+def initialize_terrain(world, terrain_data):
+    world.add_entities(_get_terrain_this_year(world, terrain_data))
+
+
+def update_terrain():
+    world.update(_get_terrain_this_year(world, terrain_data))

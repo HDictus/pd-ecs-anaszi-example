@@ -4,13 +4,7 @@ import pandas as pd
 from mock import MagicMock
 from anasazi.components import position, stockpile, food_needs, grain_yield, \
     occupying_farms, farmland, occupying_houses, home, moving
-from anasazi import stock_taking
-
-# TODO: adding a component to a world should be implicit when you add an entity or system with the component
-# TODO: should also test that when we move entities they unoccupy their old farm
-comps = (stockpile, food_needs, position,
-         occupying_farms, farmland, grain_yield,
-         occupying_houses, home)
+from anasazi import stock_taking, moving_house
 
 
 def test_moves_after_small_harvest():
@@ -22,26 +16,6 @@ def test_moves_after_small_harvest():
     assert all(world[moving].index == [0, 3])
 
 
-def test_move_out_unoccupies_house_and_farm():
-    world = World()
-    land = np.array(world.add_entities({
-        position: {'x': [1, 2, 3, 4, 5, 6, 7, 8], 'y': [4, 5,  5, 6, 7, 8, 9, 10]},
-        occupying_farms: {'num occupants': [1, 0, 1, 0, 1, 1, 1, 0]},
-        occupying_houses: {'num occupants': [0, 1, 0, 2, 0, 0, 0, 2]}}))
-    farmers = world.add_entities({home: {'id': land[[1, 3, 3, 7, 7]]},
-                                  farmland: {'id': land[[0, 2, 4, 5, 6]]}})
-    world.events.move_out(farmers[:-1])
-    print(world[occupying_farms]['num occupants'])
-    assert np.allclose(world[occupying_farms]['num occupants'], [
-        0, 0, 0, 0, 0, 0, 1, 0])
-    assert np.allclose(world[occupying_houses]['num occupants'], [
-        0, 0, 0, 0, 0, 0, 0, 1])
-
-
-
-# TODO: test move_out and then find_home called
-# TODO: test move_out event
-
 def test_moves_to_nearest_habitable_unoccupied():
     """
     When a household moves, it should seek the nearest farm that offers enough
@@ -51,45 +25,24 @@ def test_moves_to_nearest_habitable_unoccupied():
     When multiple households move, the first in the list gets priority.
     """
     world = World()
-    world.events.move_in = MagicMock()
+    lands = world.add_entities({
+        position: {'x': [0, 0, 0, 0, 0, 5, 0], 'y': [100, 100, 110, 115, 120, 120, 105]},
+        occupying_farms: {'num occupants': [1, 1, 1, 0, 0, 0, 0]},
+        occupying_houses: {'num occupants': [0, 0, 0, 0, 0, 0, 2]},
+        grain_yield: {'mean': [0.1, 0.1, 1.0, 0.5, 1.0, 1.0, 0.1]}})
     households = world.add_entities({
         position: {'x': [0, 0], 'y': [100, 100]},
-        food_needs: {'grain': [1, 1]}})
-    lands = world.add_entities({
-        position: {'x': [0, 0, 0, 0, 0], 'y': [110, 115, 120, 125, 105]},
-        occupying_farms: {'num occupants': [1, 0, 0, 0, 0]},
-        occupying_houses: {'num occupants': [0, 0, 0, 0, 2]},
-        grain_yield: {'mean': [1.0, 0.5, 1.0, 1.0, 1.0]}})
-    world.events.find_home(households)
-    outs, farms = world.events.move_in.mock_calls[0].args
-    assert outs == households
-    assert farms == [lands[2], lands[3]]
+        food_needs: {'grain': [1, 1]},
+        farmland: {'id': [0, 1]},
+        home: {'id': [6, 6]},
+        moving: {},
+        })
 
-# TODO: perhaps housing and farming should be separate systems
+    moving_house(world)
+    assert all(world[farmland]['id'].values == [lands[4], lands[5]])
+    assert all(world[home]['id'].values == [lands[3], lands[3]])
 
-
-def test_move_in_occupies_new_places():
-    world = World()
-    households = world.add_entities({
-        position: {'x': [0, 0], 'y': [100, 100]},
-        food_needs: {'grain': [1, 1]}})
-
-    lands = world.add_entities({
-        position: {'x': [0, 0, 0, 0, 0], 'y': [110, 115, 120, 125, 105]},
-        occupying_farms: {'num occupants': [1, 0, 0, 0, 0]},
-        occupying_houses: {'num occupants': [0, 0, 0, 0, 2]},
-        grain_yield: {'mean': [1.0, 0.5, 1.0, 1.0, 1.0]}})
-
-    world.events.move_in(households,
-                         [lands[2], lands[3]])
-    assert np.allclose(world[farmland].loc[households, 'id'].values,
-                       [lands[2], lands[3]])
-    assert np.allclose(world[home].loc[households, 'id'].values,
-                       [lands[1], lands[1]])
-    assert np.allclose(world[position].loc[households], [[0, 115], [0, 115]])
-
-    assert np.allclose(world[occupying_houses].values[:, 0], [0, 2, 0, 0, 2])
-    assert np.allclose(world[occupying_farms].values[:, 0], [1, 0, 1, 1, 0])
-
-# TODO: test move_in event is called
-# TODO: test move_in event
+    assert all(world[occupying_farms]['num occupants']
+               == [0, 0, 1, 0, 1, 1, 0])
+    assert all(world[occupying_houses]['num occupants']
+               == [0, 0, 0, 2, 0, 0, 0])

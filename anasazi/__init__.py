@@ -1,7 +1,11 @@
 import numpy as np
 from pathlib import Path
 import pandas as pd
+import pkg_resources
+from tqdm import tqdm
 import anasazi.components as comp
+
+# BIG TODO: revisit this with the goal of writing out the optimal, most sensical way of doing it instead of a working implementattion
 
 # I think the choices of components here illustrate just how not-immune an ECS is to adding logic assumptions into the data
 # ....
@@ -64,7 +68,9 @@ def stock_taking(world, harvest):
 
 # there will be operations here that do not involve any "game logic", that just adjust the other components that need to change when an entity moves house...
 
-def _move_out(world, home_ids, farm_ids):
+def _move_out(world, movers):
+    havefarms = world[(comp.moving, comp.farmland, comp.home)]
+    _, farm_ids, home_ids = havefarms.data()
     farms = farm_ids['id'].value_counts()
     homes = home_ids['id'].value_counts()
     world[comp.occupying_farms].loc[farms.index, 'num occupants'] -=\
@@ -93,7 +99,8 @@ def _find_home(mover_positions, mover_needs, arable_land):
     nearest_farms = []
     for dist in distances:
         if not np.isfinite(dist).any():
-            assert False, "lol, TODO"
+            # assert False, "lol, TODO"
+            pass
         nearest = np.argmin(dist)
         distances[:, nearest] = np.inf
         nearest_farms.append(positions.index[nearest])
@@ -110,7 +117,6 @@ def _move_in(world, household_ids, farm_ids, farm_positions):
     house_posns, occupants, farmed = potential_housing.data()
 
     potential_house_positions = house_posns[farmed['num occupants'] == 0]
-
     house_to_farm_distance = np.linalg.norm(
         potential_house_positions.values[np.newaxis, ...]
         - positions.loc[farm_ids].values[..., np.newaxis, :],
@@ -135,11 +141,11 @@ def moving_house(world):
     # TODO: I can't entirely explain why, but I have a feeling that it would be a good
     # practice to not have helper functions push changes.
     movers = world[
-        (comp.home, comp.farmland, comp.food_needs, comp.moving, comp.position)
+        (comp.food_needs, comp.moving, comp.position)
     ]
-    home_ids, farm_ids, needs, moving, position = movers.data()
+    needs, moving, position = movers.data()
     # move out: see this is a fairly generic operation that many systems will need...
-    _move_out(world, home_ids, farm_ids)
+    _move_out(world, movers.ids)
     arable_land = world[
         (comp.position, comp.grain_yield,
          comp.occupying_farms, comp.occupying_houses)
@@ -149,19 +155,18 @@ def moving_house(world):
 
 
 def load_terrain(terrain_file, min_year, soil_quality_variance=0.2, coeff_var=0.2):
+    print("loading terrain array")
     terrain_array = np.load(terrain_file)
+    soil_quality = np.random.normal(1, soil_quality_variance, size=terrain_array[0].shape)
+    terrain_array *= soil_quality[np.newaxis, ...]
     dat = []
-    for (t, x, y), val in np.ndenumerate(terrain_array):
+    print("dataframify")
+    for (t, x, y), val in tqdm(np.ndenumerate(terrain_array)):
         dat.append({'year': t + min_year, 'x': x, 'y': y, 'mean': val})
     terrain_data = pd.DataFrame(dat)
-    patches = [(x, y) for (x, y), _ in terrain_data.groupby(['x', 'y'])]
-    soil_quality = np.random.normal(1, soil_quality_variance, size=len(patches))
-    terrain_data = terrain_data.set_index(['x', 'y'])
-    for patch, quality in zip(patches, soil_quality):
-        terrain_data.loc[patch, 'mean'] *= quality
 
     terrain_data['var'] = terrain_data['mean'] * coeff_var
-    return terrain_data.reset_index()
+    return terrain_data
 
 
 def _get_terrain_this_year(world, terrain_data):
@@ -175,8 +180,59 @@ def _get_terrain_this_year(world, terrain_data):
 
 
 def initialize_terrain(world, terrain_data):
-    world.add_entities(_get_terrain_this_year(world, terrain_data))
+    terrain = world.add_entities(_get_terrain_this_year(world, terrain_data))
+    # it would be neat here to be able to simply say: give this cmponent, with all nil values
+    # TODO: test
+    world.give(terrain, {comp.occupying_farms: {'num occupants': 0},
+                         comp.occupying_houses: {'num occupants': 0}})
 
 
-def update_terrain():
-    world.update(_get_terrain_this_year(world, terrain_data))
+def update_terrain(world, terrain_data):
+    terrain = world[(comp.position, comp.grain_yield)]
+    year = world[comp.time].iloc[0].year
+    this_year = terrain_data.set_index('year').loc[year].reset_index().set_index(['x', 'y'])
+    yields = terrain[comp.grain_yield].assign(**terrain[comp.position]).set_index(['x', 'y'])
+    yields[['mean', 'var']] = this_year[['mean', 'var']]
+    # TODO: this should give a better error message
+    # world.update(yields.set_index(terrain.ids))
+    # TODO: i've learned that I'm dissatisfied with my ecs
+    world.update({comp.grain_yield: yields.set_index(terrain.ids)})
+
+# naming convention is all over the place
+def eat(world, dt):
+    # being able to 'set' the values in the filter may be handy
+    # their being slices may be counterintuitive.
+    # we'd need some way to know that the corresponding world data
+    # has not been updated.
+    needs, piles = world[(comp.food_needs, comp.stockpile)].data()
+    piles -= needs * dt
+    world.update({comp.stockpile: piles})
+
+
+def initialize(world):
+    hhlds = world.add_entities({
+        comp.position: {'x': range(100), 'y': range(100)},
+        # what were the actual parameters again?
+        comp.food_needs: {'grain': 800},
+        comp.stockpile: {'grain': 800},
+        comp.moving: {}})
+    world.add_entities(
+        {comp.time: {'year': [800]}})
+
+    world.terrain_data = load_terrain(
+        pkg_resources.resource_filename("anasazi", "yields 800-1349.npy"),
+        min_year=800
+    )
+    initialize_terrain(world, world.terrain_data)
+    moving_house(world)
+
+
+def step(world):
+    update_terrain(world, world.terrain_data)
+    eat(world, 1)
+    harvest = harvest_grain(world)
+    stock_taking(world, harvest)
+    moving_house(world)
+    world[comp.time]['year'] += 1
+
+from anasazi import ui

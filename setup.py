@@ -25,7 +25,9 @@ setup(
     description="artificial anasazi",
     license="MIT",
     install_requires=[
-        'pd_ecs'
+        'pd_ecs',
+        'tqdm',
+        'pyglet'
     ],
     packages=find_packages(),
     python_requires=">=3.6",

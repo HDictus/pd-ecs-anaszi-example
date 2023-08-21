@@ -4,15 +4,15 @@ import pkg_resources
 from pathlib import Path
 from pd_ecs import World
 from anasazi import harvest_grain, initialize_terrain, update_terrain, load_terrain
-from anasazi.components import position, grain_yield, stockpile, farmland, time
+from anasazi import components as comps
 from mock import MagicMock
 
 
 def test_harvest():
     world = World()
-    land = world.add_entities({grain_yield: {'mean': [100, 200, 0], 'var': [25, 50, 0]}})
-    homes = world.add_entities({stockpile: {'grain': [0, 25, 60]},
-                                farmland: {'id': land}})
+    land = world.add_entities({comps.YIELD: {'mean': [100, 200, 0], 'var': [25, 50, 0]}})
+    homes = world.add_entities({comps.STOCKPILE: {'grain': [0, 25, 60]},
+                                comps.FARMLAND: {'id': land}})
 
     def mock_norm(mean, var):
         return mean + var
@@ -21,7 +21,7 @@ def test_harvest():
     np.random.normal = mock_norm
     harvest_grain(world, max_grain_stock=250)
     np.random.normal = oldnorm
-    assert np.allclose(world[stockpile]['grain'].values, [125, 250, 60])
+    assert np.allclose(world[comps.STOCKPILE]['grain'].values, [125, 250, 60])
 
 
 def test_terrain_updates():

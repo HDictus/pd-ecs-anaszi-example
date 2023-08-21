@@ -2,18 +2,25 @@ import numpy as np
 from pd_ecs import World
 import pandas as pd
 from mock import MagicMock
-from anasazi.components import position, stockpile, food_needs, grain_yield, \
-    occupying_farms, farmland, occupying_houses, home, moving
-from anasazi import stock_taking, moving_house
+from anasazi import components as comps
+import anasazi
+import mock
 
 
 def test_moves_after_small_harvest():
     world = World()
+    # TODO: it is better to be able to avoid mocking
+    # say we choose to call it something else?
+    # it's a little brittle.
+    oldmove = anasazi.move
+    anasazi.move = mock.MagicMock()
     households = world.add_entities({
-        stockpile: {'grain': [1, 2, 3, 2]},
-        food_needs: {'grain': [2.5, 2.5, 2.5, 2.5]}})
-    stock_taking(world, pd.Series([1, 1, 0, 0], index=households))
-    assert all(world[moving].index == [0, 3])
+        comps.STOCKPILE: {'grain': [1, 2, 3, 2]},
+        comps.FOOD_NEEDS: {'grain': [2.5, 2.5, 2.5, 2.5]}})
+    anasazi.stock_taking(world, pd.Series([1, 1, 0, 0], index=households))
+
+    assert all(anasazi.move.call_args[0][1] == [0, 3])
+    anasazi.move = oldmove
 
 
 def test_moves_to_nearest_habitable_unoccupied():
@@ -26,23 +33,23 @@ def test_moves_to_nearest_habitable_unoccupied():
     """
     world = World()
     lands = world.add_entities({
-        position: {'x': [0, 0, 0, 0, 0, 5, 0], 'y': [100, 100, 110, 115, 120, 120, 105]},
-        occupying_farms: {'num occupants': [1, 1, 1, 0, 0, 0, 0]},
-        occupying_houses: {'num occupants': [0, 0, 0, 0, 0, 0, 2]},
-        grain_yield: {'mean': [0.1, 0.1, 1.0, 0.5, 1.0, 1.0, 0.1]}})
+        comps.POSITION: {'x': [0, 0, 0, 0, 0, 5, 0], 'y': [100, 100, 110, 115, 120, 120, 105]},
+        comps.OCCUPYING_HOMES: {'num occupants': [0, 0, 0, 0, 0, 0, 2]},
+        comps.YIELD: {'mean': [0.1, 0.1, 1.0, 0.5, 1.0, 1.0, 0.1]}})
+    world.give(lands[:3], {comps.FARMED: {'is_farmed': True}})
     households = world.add_entities({
-        position: {'x': [0, 0], 'y': [100, 100]},
-        food_needs: {'grain': [1, 1]},
-        farmland: {'id': [0, 1]},
-        home: {'id': [6, 6]},
-        moving: {},
+        comps.POSITION: {'x': [0, 0], 'y': [100, 100]},
+        comps.FOOD_NEEDS: {'grain': [1, 1]},
+        comps.FARMLAND: {'id': [0, 1]},
+        comps.HOME: {'id': [6, 6]},
         })
 
-    moving_house(world)
-    assert all(world[farmland]['id'].values == [lands[4], lands[5]])
-    assert all(world[home]['id'].values == [lands[3], lands[3]])
+    anasazi.move(world, households)
+    assert all(world[comps.FARMLAND]['id'].values == [lands[4], lands[5]])
+    assert all(world[comps.HOME]['id'].values == [lands[3], lands[3]])
 
-    assert all(world[occupying_farms]['num occupants']
-               == [0, 0, 1, 0, 1, 1, 0])
-    assert all(world[occupying_houses]['num occupants']
-               == [0, 0, 0, 2, 0, 0, 0])
+    assert all(world[comps.FARMED]['is_farmed'].index
+               == [lands[2], lands[4], lands[5]])
+    assert np.allclose(
+        world[comps.OCCUPYING_HOMES]['num occupants'],
+        [0, 0, 0, 2, 0, 0, 0])

@@ -14,8 +14,8 @@ def test_harvest():
     homes = world.add_entities({comps.STOCKPILE: {'grain': [0, 25, 60]},
                                 comps.FARMLAND: {'id': land}})
 
-    def mock_norm(mean, var):
-        return mean + var
+    def mock_norm(loc, scale):
+        return loc + scale
 
     oldnorm = np.random.normal
     np.random.normal = mock_norm

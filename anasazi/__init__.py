@@ -26,9 +26,10 @@ def harvest_grain(world, max_grain_stock=1600):
     households = world[[comps.STOCKPILE.grain, comps.FARMLAND.id]]
     farms = world[comps.YIELD].loc[households[comps.FARMLAND.id]]
     harvest = np.random.normal(
-        farms[comps.YIELD.mean], farms[comps.YIELD.var])
-    households[comps.STOCKPILE.grain] += np.clip(harvest, 0, max_grain_stock)
-    world.loc[households.index, comps.STOCKPILE.grain] += households[comps.STOCKPILE.grain]
+        farms[comps.YIELD.mean[1]], farms[comps.YIELD.var[1]])
+    households[comps.STOCKPILE.grain] += np.maximum(harvest.values, 0)
+    households[comps.STOCKPILE.grain] = np.minimum(households[comps.STOCKPILE.grain], max_grain_stock)
+    world.loc[households.index, comps.STOCKPILE.grain] = households[comps.STOCKPILE.grain]
     return pd.Series(harvest, index=households.index)
 
 # We run into a problem: stock-taking can depend on e.g. last harvest

@@ -15,10 +15,13 @@ class Window:
         def on_draw():
             self.window.clear()
             land = self.world[
-                (comp.position, comp.grain_yield,
-                 comp.occupying_farms,
-                 comp.occupying_houses)]
-            posn, yields, farms, houses = land.data()
+                [comp.POSITION, comp.YIELD,
+                 comp.FARMED,
+                 comp.OCCUPYING_HOMES]]
+            posn = land[comp.POSITION]
+            yields = land[comp.YIELD]
+            farms = land[comp.FARMED]
+            houses = land[comp.OCCUPYING_HOMES]
             maxx = posn['x'].max()
             maxy = posn['y'].max()
             ratio = min(width / maxx, height / maxy)

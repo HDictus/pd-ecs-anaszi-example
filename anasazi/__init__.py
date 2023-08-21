@@ -77,12 +77,16 @@ def _calculate_distances_matrix(positions1, positions2):
     return np.linalg.norm(displacements, axis=-1)
 
 def _move_out(world, movers):
-    del world.loc[world.loc[movers, comps.FARMLAND.id], comps.FARMED]
+    have_farm = world[comps.FARMLAND].index.intersection(movers)
+    del world.loc[world.loc[have_farm, comps.FARMLAND.id], comps.FARMED]
+    have_home = world[comps.HOME].index.intersection(movers)
+    if len(have_home) == 0:
+        return
     unique_homes, counts = np.unique(
-        world.loc[movers, comps.HOME.id],
+        world.loc[have_home, comps.HOME.id],
         return_counts=True)
     world[comps.OCCUPYING_HOMES].loc[unique_homes] -= counts
-    del world.loc[movers, [comps.FARMLAND]]
+    del world.loc[have_home, comps.HOME]
 
 
 def _find_farm(world, movers):
@@ -141,7 +145,7 @@ def _move_in(world, household_ids, house_ids):
     # this does not make it especially simple
     # getitem is really simple... maybe we should just stick with that?
     world.loc[household_ids, comps.POSITION] = world.loc[house_ids, comps.POSITION]
-    world.loc[household_ids, comps.HOME] = house_ids
+    world.give(household_ids, {comps.HOME: {'id': house_ids}})
 
 
 def move(world, mover_ids):
@@ -182,8 +186,7 @@ def initialize_terrain(world, terrain_data):
     terrain = world.add_entities(_get_terrain_this_year(world, terrain_data))
     # it would be neat here to be able to simply say: give this cmponent, with all nil values
     # TODO: test
-    world.give(terrain, {comps.FARMED: {'is_farmed': False},
-                         comps.OCCUPYING_HOMES: {'num occupants': 0}})
+    world.give(terrain, {comps.OCCUPYING_HOMES: {'num occupants': 0}})
 
 
 def update_terrain(world, terrain_data):

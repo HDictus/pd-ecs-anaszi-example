@@ -53,3 +53,20 @@ def test_moves_to_nearest_habitable_unoccupied():
     assert np.allclose(
         world[comps.OCCUPYING_HOMES]['num occupants'],
         [0, 0, 0, 2, 0, 0, 0])
+
+
+def test_move_works_for_farmless_folks():
+    world = World()
+    lands = world.add_entities({
+        comps.POSITION: {'x': [0, 0, 0, 0, 0, 5, 0], 'y': [100, 100, 110, 115, 120, 120, 105]},
+        comps.OCCUPYING_HOMES: {'num occupants': [0, 0, 0, 0, 0, 0, 2]},
+        comps.YIELD: {'mean': [0.1, 0.1, 1.0, 0.5, 1.0, 1.0, 0.1]}})
+    world.give(lands[:3], {comps.FARMED: {'is_farmed': True}})
+    households = world.add_entities({
+        comps.POSITION: {'x': [0, 0], 'y': [100, 100]},
+        comps.FOOD_NEEDS: {'grain': [1, 1]},
+        })
+
+    anasazi.move(world, households)
+    assert all(world[comps.FARMLAND]['id'].values == [lands[4], lands[5]])
+    assert all(world[comps.HOME]['id'].values == [lands[3], lands[3]])

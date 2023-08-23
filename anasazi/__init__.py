@@ -26,8 +26,8 @@ def harvest_grain(world, max_grain_stock=1600):
     households = world[[comps.STOCKPILE.grain, comps.FARMLAND.id]]
     farms = world[comps.YIELD].loc[households[comps.FARMLAND.id]]
     harvest = np.random.normal(
-        farms[comps.YIELD.mean[1]], farms[comps.YIELD.var[1]])
-    households[comps.STOCKPILE.grain] += np.maximum(harvest.values, 0)
+        farms[comps.YIELD.mean[1]].values, farms[comps.YIELD.var[1]].values)
+    households[comps.STOCKPILE.grain] += np.maximum(harvest, 0)
     households[comps.STOCKPILE.grain] = np.minimum(households[comps.STOCKPILE.grain], max_grain_stock)
     world.loc[households.index, comps.STOCKPILE.grain] = households[comps.STOCKPILE.grain]
     return pd.Series(harvest, index=households.index)
@@ -74,18 +74,19 @@ def _calculate_distances_matrix(positions1, positions2):
         positions1[..., np.newaxis, :]
         - positions2[np.newaxis,]
     )
-    return np.linalg.norm(displacements, axis=-1)
+    return np.linalg.norm(np.float32(displacements), axis=-1)
 
 def _move_out(world, movers):
     have_farm = world[comps.FARMLAND].index.intersection(movers)
-    del world.loc[world.loc[have_farm, comps.FARMLAND.id], comps.FARMED]
+    if len(have_farm) > 0:
+        del world.loc[world.loc[have_farm, comps.FARMLAND.id], comps.FARMED]
     have_home = world[comps.HOME].index.intersection(movers)
     if len(have_home) == 0:
         return
     unique_homes, counts = np.unique(
         world.loc[have_home, comps.HOME.id],
         return_counts=True)
-    world[comps.OCCUPYING_HOMES].loc[unique_homes] -= counts
+    world.loc[unique_homes, comps.OCCUPYING_HOMES.num] -= counts
     del world.loc[have_home, comps.HOME]
 
 
@@ -95,7 +96,7 @@ def _find_farm(world, movers):
     land = world[[comps.YIELD, comps.POSITION, comps.OCCUPYING_HOMES, ~comps.FARMED]]
     unoccupied_land = land[
         land[comps.OCCUPYING_HOMES.num] == 0]
-    # these are the wrong way around
+
     distances = _calculate_distances_matrix(
         world.loc[movers, comps.POSITION].values,
         unoccupied_land[comps.POSITION].values)
@@ -150,6 +151,8 @@ def _move_in(world, household_ids, house_ids):
 
 def move(world, mover_ids):
     """Moving households seek a home that can feed them."""
+    if len(mover_ids) == 0:
+        return
     _move_out(world, mover_ids)
     mover_ids, farm_ids = _find_farm(world, mover_ids)
     _start_farm(world, mover_ids, farm_ids)

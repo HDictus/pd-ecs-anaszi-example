@@ -34,12 +34,17 @@ class Window:
             yield_max = yields['mean'].max()
             yieldcolor = ((yields['mean']) / yield_max) * 255
             yieldcolor[np.isnan(yieldcolor)] = 0
+            patches_batch = pyglet.graphics.Batch()
+            patches = []
             for i in posn.index:
                 # TODO: num occupying, num occupants... I need to make sure these are enums or sth.
-                circle = pyglet.shapes.Circle(
+                patch = pyglet.shapes.Rectangle(
                     x=posn.loc[i, 'x'] * ratio, y=posn.loc[i, 'y'] * ratio,
-                    radius=2, color=(0 if i in farmed_land.index else 255, int(yieldcolor[i]), 0))
-                circle.draw()
+                    width=ratio, height=ratio,
+                    color=(0 if i in farmed_land.index else 255, int(yieldcolor[i]), 0),
+                    batch=patches_batch)
+                patches.append(patch)
+
             houses_batch = pyglet.graphics.Batch()
             sprites = []
             for _, row in world[[comp.POSITION, comp.OCCUPYING_HOMES.num]].iterrows():
@@ -50,6 +55,8 @@ class Window:
                     batch=houses_batch)
                 sprite.scale = row[comp.OCCUPYING_HOMES.num] / 3
                 sprites.append(sprite)
+                
+            patches_batch.draw()
             houses_batch.draw()
                 
 

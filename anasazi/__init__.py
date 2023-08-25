@@ -160,7 +160,7 @@ def move(world, mover_ids):
     _move_in(world, mover_ids, home_ids)
 
 
-def load_terrain(terrain_file, min_year, soil_quality_variance=0.2, coeff_var=0.2):
+def load_terrain(terrain_file, min_year, soil_quality_variance=0.2, coeff_var=0.2, transpose=True):
     print("loading terrain array")
     terrain_array = np.load(terrain_file)
     soil_quality = np.random.normal(1, soil_quality_variance, size=terrain_array[0].shape)
@@ -170,7 +170,8 @@ def load_terrain(terrain_file, min_year, soil_quality_variance=0.2, coeff_var=0.
     for (t, x, y), val in tqdm(np.ndenumerate(terrain_array)):
         dat.append({'year': t + min_year, 'x': x, 'y': y, 'mean': val})
     terrain_data = pd.DataFrame(dat)
-
+    if transpose:
+        terrain_data[['x', 'y']] = terrain_data[['y', 'x']]
     terrain_data['var'] = terrain_data['mean'] * coeff_var
     return terrain_data
 

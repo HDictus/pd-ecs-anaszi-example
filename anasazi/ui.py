@@ -1,7 +1,14 @@
 import anasazi
 import anasazi.components as comp
 import numpy as np
+import pkg_resources
 import pyglet
+
+
+house = pyglet.image.load(
+    pkg_resources.resource_filename("anasazi", "house.png"))
+house.anchor_x = house.width // 2
+house.anchor_y = 0
 
 
 class Window:
@@ -15,11 +22,9 @@ class Window:
         def on_draw():
             self.window.clear()
             land = self.world[
-                [comp.POSITION, comp.YIELD,
-                 comp.OCCUPYING_HOMES]]
+                [comp.POSITION, comp.YIELD]]
             posn = land[comp.POSITION]
             yields = land[comp.YIELD]
-            houses = land[comp.OCCUPYING_HOMES]
             farmed_land = self.world[
                 [comp.POSITION, comp.YIELD, comp.FARMED]
             ]
@@ -35,6 +40,18 @@ class Window:
                     x=posn.loc[i, 'x'] * ratio, y=posn.loc[i, 'y'] * ratio,
                     radius=2, color=(0 if i in farmed_land.index else 255, int(yieldcolor[i]), 0))
                 circle.draw()
+            houses_batch = pyglet.graphics.Batch()
+            sprites = []
+            for _, row in world[[comp.POSITION, comp.OCCUPYING_HOMES.num]].iterrows():
+                sprite =pyglet.sprite.Sprite(
+                    house, 
+                    x=row[comp.POSITION.x] * ratio,
+                    y=row[comp.POSITION.y] * ratio,
+                    batch=houses_batch)
+                sprite.scale = row[comp.OCCUPYING_HOMES.num] / 3
+                sprites.append(sprite)
+            houses_batch.draw()
+                
 
         @self.window.event
         def update(dt):

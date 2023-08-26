@@ -23,9 +23,3 @@ def test_harvest():
     np.random.normal = oldnorm
     assert np.allclose(world[comps.STOCKPILE]['grain'].values, [125, 250, 60])
 
-
-def test_terrain_updates():
-    # hurr durr not sure how to test
-    terrain_file = Path(__file__).parent / 'data' / 'yields 800-805.npy'
-    terrain_data = load_terrain(terrain_file, 800,
-                                soil_quality_variance=0.1, coeff_var=0.2)

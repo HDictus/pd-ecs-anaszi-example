@@ -163,18 +163,20 @@ def move(world, mover_ids):
 def load_terrain(terrain_file, min_year, soil_quality_variance=0.2, coeff_var=0.2, transpose=True):
     print("loading terrain array")
     terrain_array = np.load(terrain_file)
-    soil_quality = np.random.normal(1, soil_quality_variance, size=terrain_array[0].shape)
-    terrain_array *= soil_quality[np.newaxis, ...]
-    dat = []
-    print("dataframify")
-    for (t, x, y), val in tqdm(np.ndenumerate(terrain_array)):
-        dat.append({'year': t + min_year, 'x': x, 'y': y, 'mean': val})
-    terrain_data = pd.DataFrame(dat)
-    if transpose:
-        terrain_data[['x', 'y']] = terrain_data[['y', 'x']]
-    terrain_data['var'] = terrain_data['mean'] * coeff_var
-    return terrain_data
-
+    soil_quality = np.maximum(0, np.random.normal(
+        1, soil_quality_variance, terrain_array[0].shape))
+    terrain_array *= soil_quality[np.newaxis]
+    flat_mean = terrain_array.flatten()
+    t, x, y = np.unravel_index(
+        np.arange(len(flat_mean)), terrain_array.shape)
+    dataframe = pd.DataFrame({
+        'mean': flat_mean,
+        'var': flat_mean * coeff_var,
+        'year': t + 800,
+        'x': x,
+        'y': y
+    })
+    return dataframe.set_index(['year', 'x', 'y'])
 
 def _get_terrain_this_year(world, terrain_data):
     # we should probably have a better way to deal with global vars...
@@ -186,14 +188,18 @@ def _get_terrain_this_year(world, terrain_data):
     }
 
 
-def initialize_terrain(world, terrain_data):
-    terrain = world.add_entities(_get_terrain_this_year(world, terrain_data))
-    # it would be neat here to be able to simply say: give this cmponent, with all nil values
-    # TODO: test
-    world.give(terrain, {comps.OCCUPYING_HOMES: {'num occupants': 0}})
+def initialize_terrain(world, terrain_data, year=800):
+    terrain = world.add_entities({
+        comps.POSITION: terrain_data.loc[year].reset_index()[['x', 'y']],
+        comps.OCCUPYING_HOMES: {'num occupants': 0},
+        comps.YIELD: terrain_data.loc[year, ['mean', 'var']],
+    })
+    return terrain
 
 
 def update_terrain(world, terrain_data):
+    # TODO: it would be way better to use the historical rainfall data
+    #  directly and convert that to annual yield in this process.
     terrain = world[(comps.POSITION, comps.YIELD)]
     year = world[comps.TIME].iloc[0].year
     this_year = terrain_data.set_index('year').loc[year].reset_index().set_index(['x', 'y'])
@@ -238,5 +244,6 @@ def step(world):
     harvest = harvest_grain(world)
     stock_taking(world, harvest)
     world[comps.TIME]['year'] += 1
+
 
 from anasazi import ui

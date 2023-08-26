@@ -1,13 +1,28 @@
 from pd_ecs import World
-import time
 import anasazi
-import anasazi.components as comp
-import numpy as np
 import pyglet
-import matplotlib.pyplot as plt
+import cProfile
+import pandas as pd
+import minicli
 
-world = World()
 
-anasazi.initialize(world)
-win = anasazi.ui.Window(world)
-pyglet.app.run()
+def display_simulation(profile=False):
+    world = World()
+
+    anasazi.initialize(world)
+    win = anasazi.ui.Window(world)
+    if profile:
+        with cProfile.Profile() as pr:
+            pyglet.app.run()
+
+        df = pd.DataFrame(
+            pr.getstats(),
+            columns=['func', 'ncalls', 'ccalls', 'tottime', 'cumtime', 'callers']
+        )
+        print(df.head())
+        df.to_csv("profile.csv")
+        return
+    pyglet.app.run()
+
+if __name__ == "__main__":
+    minicli.command(display_simulation)

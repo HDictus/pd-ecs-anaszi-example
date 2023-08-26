@@ -221,6 +221,31 @@ def eat(world, dt):
     world.update({comps.STOCKPILE: piles})
 
 
+def starve(world):
+    return
+
+def households_fission(
+    world, min_age=16, max_age=40, fertility=0.1):
+    households = world[[
+        comps.AGE, comps.POSITION, comps.STOCKPILE,
+        comps.FOOD_NEEDS,
+        ]]
+    of_age = households[np.logical_and(
+        households[comps.AGE.years] >= min_age,
+        households[comps.AGE.years] <= max_age)]
+    fissions = of_age[
+        np.random.uniform(0, 1, len(of_age)) < fertility]
+    # TODO: test case where no fissions
+    world.loc[fissions.index, comps.STOCKPILE.grain] /= 2
+    # TODO: should have a separate event for new households
+    new = world.add_entities({
+        comps.POSITION: fissions[comps.POSITION],
+        comps.AGE: {'years': 0},
+        comps.STOCKPILE: fissions[comps.STOCKPILE] / 2,
+        comps.FOOD_NEEDS: fissions[comps.FOOD_NEEDS]
+    })
+    return new
+
 
 def initialize(world):
   
@@ -234,14 +259,15 @@ def initialize(world):
     initialize_terrain(world, world.terrain_data)
     minp = world[comps.POSITION].min()
     maxp = world[comps.POSITION].max()
-    N=100
+    N = 100
     hhlds = world.add_entities({
         comps.POSITION: {
             'x': np.random.uniform(minp.x, maxp.x, size=N),
             'y': np.random.uniform(minp.y, maxp.y, size=N)},
         # what were the actual parameters again?
+        comps.AGE: {'years': np.random.uniform(0, 50, size=N)},
         comps.FOOD_NEEDS: {'grain': 800},
-        comps.STOCKPILE: {'grain': 800},})
+        comps.STOCKPILE: {'grain': 800}})
     move(world, hhlds)
 
 
@@ -250,7 +276,12 @@ def step(world):
     eat(world, 1)
     harvest = harvest_grain(world)
     stock_taking(world, harvest)
+    new = households_fission(world)
+    move(world, new)
+    # TODO: shows a limitation of the ecs framework
     world[comps.TIME]['year'] += 1
+    world[comps.AGE]['years'] += 1
+    print("pop:", len(world[comps.AGE]))
 
 
 from anasazi import ui

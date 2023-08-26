@@ -25,6 +25,7 @@ def test_load_terrain():
 TERRAIN_DATA = test_module.load_terrain(
     TERRAIN_FILE, 800, soil_quality_variance=0.1, coeff_var=2)
 
+
 def test_initialize_terrain():
     world = pd_ecs.World()
     test_module.initialize_terrain(
@@ -40,6 +41,7 @@ def test_initialize_terrain():
         TERRAIN_DATA.loc[800, ['mean', 'var']].values
     )
     assert all(world[comps.OCCUPYING_HOMES] == 0)
+
 
 def test_update_terrain():
     # hurr durr not sure how to test

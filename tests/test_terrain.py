@@ -43,4 +43,17 @@ def test_initialize_terrain():
 
 def test_update_terrain():
     # hurr durr not sure how to test
-    assert False
+    world = pd_ecs.World()
+    test_module.initialize_terrain(
+        world,
+        TERRAIN_DATA,
+        year=800
+    )
+    world.add_entities({comps.TIME: {'year': [801]}})
+    test_module.update_terrain(
+        world,
+        TERRAIN_DATA
+    )
+    assert np.allclose(
+        world[comps.YIELD].values,
+        TERRAIN_DATA.loc[802, ['mean', 'var']].values)

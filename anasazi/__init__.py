@@ -202,7 +202,7 @@ def update_terrain(world, terrain_data):
     #  directly and convert that to annual yield in this process.
     terrain = world[(comps.POSITION, comps.YIELD)]
     year = world[comps.TIME].iloc[0].year
-    this_year = terrain_data.set_index('year').loc[year].reset_index().set_index(['x', 'y'])
+    this_year = terrain_data.loc[year]
     yields = terrain[comps.YIELD].assign(**terrain[comps.POSITION]).set_index(['x', 'y'])
     yields[['mean', 'var']] = this_year[['mean', 'var']]
     # TODO: this should give a better error message
@@ -221,12 +221,9 @@ def eat(world, dt):
     world.update({comps.STOCKPILE: piles})
 
 
+
 def initialize(world):
-    hhlds = world.add_entities({
-        comps.POSITION: {'x': range(100), 'y': range(100)},
-        # what were the actual parameters again?
-        comps.FOOD_NEEDS: {'grain': 800},
-        comps.STOCKPILE: {'grain': 800},})
+  
     world.add_entities(
         {comps.TIME: {'year': [800]}})
 
@@ -235,6 +232,16 @@ def initialize(world):
         min_year=800
     )
     initialize_terrain(world, world.terrain_data)
+    minp = world[comps.POSITION].min()
+    maxp = world[comps.POSITION].max()
+    N=100
+    hhlds = world.add_entities({
+        comps.POSITION: {
+            'x': np.random.uniform(minp.x, maxp.x, size=N),
+            'y': np.random.uniform(minp.y, maxp.y, size=N)},
+        # what were the actual parameters again?
+        comps.FOOD_NEEDS: {'grain': 800},
+        comps.STOCKPILE: {'grain': 800},})
     move(world, hhlds)
 
 

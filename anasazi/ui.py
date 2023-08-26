@@ -7,13 +7,13 @@ import pyglet
 
 house = pyglet.image.load(
     pkg_resources.resource_filename("anasazi", "house.png"))
-house.anchor_x = house.width // 2
+house.anchor_x = house.width//2
 house.anchor_y = 0
 
 
 class Window:
 
-    def __init__(self, world):
+    def __init__(self, world, transpose=True):
         width, height = 960, 480
         self.window = pyglet.window.Window(width, height)
         self.world = world
@@ -25,9 +25,9 @@ class Window:
                 [comp.POSITION, comp.YIELD]]
             posn = land[comp.POSITION]
             yields = land[comp.YIELD]
-            farmed_land = self.world[
-                [comp.POSITION, comp.YIELD, comp.FARMED]
-            ]
+            farmed_land = self.world[comp.FARMED]
+            if transpose:
+                posn[['x', 'y']] = posn[['y', 'x']]
             maxx = posn['x'].max()
             maxy = posn['y'].max()
             ratio = min(width / maxx, height / maxy)
@@ -46,8 +46,14 @@ class Window:
                 patches.append(patch)
 
             houses_batch = pyglet.graphics.Batch()
+            houses = world[[comp.POSITION, comp.OCCUPYING_HOMES.num]]
+            if transpose:
+                # TODO: much better to do by maintaining sprites and 
+                # using their positions indepenent of actual
+                houses[[comp.POSITION.x, comp.POSITION.y]] =\
+                    houses[[comp.POSITION.y, comp.POSITION.x]]
             sprites = []
-            for _, row in world[[comp.POSITION, comp.OCCUPYING_HOMES.num]].iterrows():
+            for _, row in houses.iterrows():
                 sprite =pyglet.sprite.Sprite(
                     house, 
                     x=row[comp.POSITION.x] * ratio,

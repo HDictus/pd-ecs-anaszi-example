@@ -17,9 +17,12 @@ class Window:
         width, height = 960, 480
         self.window = pyglet.window.Window(width, height)
         self.world = world
-
+        self.i = 0
         @self.window.event
         def on_draw():
+            self.i+=1 
+            if self.i % 10 != 0:
+                return
             self.window.clear()
             land = self.world[
                 [comp.POSITION, comp.YIELD]]

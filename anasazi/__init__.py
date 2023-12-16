@@ -222,7 +222,13 @@ def eat(world, dt):
 
 
 def starve(world):
-    return
+    stockpiles = world[[comps.FOOD_NEEDS, comps.STOCKPILE]]
+    world.remove_entities(
+        stockpiles.index[
+            stockpiles[comps.FOOD_NEEDS.grain] 
+            > stockpiles[comps.STOCKPILE.grain]]
+    )
+
 
 def households_fission(
     world, min_age=16, max_age=40, fertility=0.1):
@@ -273,14 +279,22 @@ def initialize(world):
 
 def step(world):
     update_terrain(world, world.terrain_data)
-    eat(world, 1)
     harvest = harvest_grain(world)
     stock_taking(world, harvest)
+    starve(world)
+    eat(world, 1)
     new = households_fission(world)
     move(world, new)
     # TODO: shows a limitation of the ecs framework
     world[comps.TIME]['year'] += 1
     world[comps.AGE]['years'] += 1
+    # TODO: lol dumbass, removal of households should have its onw
+    #   event that can deal with e.g. freeing up farmed land
+    # But no, even better. Should implement column set/getting.
+    # these can be inferred from other entities FARMED and POSITIONs
+    world.remove_entities(
+        world[comps.AGE].index[world[comps.AGE.years] > 60]
+    )
     print("pop:", len(world[comps.AGE]))
 
 

@@ -267,6 +267,7 @@ def households_started(world, parents):
         comps.STOCKPILE: world.loc[parents, comps.STOCKPILE] / 2,
         comps.FOOD_NEEDS: world.loc[parents, comps.FOOD_NEEDS]
     })
+    world.loc[parents, comps.STOCKPILE] /= 2
     return new
 
 

@@ -27,6 +27,10 @@ from mock import patch
 # TODO: this is most likely an argument for using a separate event manager through which you call events
 #  that way you can check that a given event is called with particular arguments.
 
+# TODO: I suppose the question is: are is the households_started event a part of households_fission or not?
+#   Arguably, there are two separate events here: choosing parents and creating offspring
+#   these always occur together however, and so there should be an extra abstraction that does both.
+
 
 def test_fission_randomly_at_reproductive_ages():
     """
@@ -55,6 +59,30 @@ def test_fission_no_births():
     )
     with assert_households_started() as ae:
         assert len(ae.call_logger.calls) == 0
+
+
+def test_children_age_0():
+    world = pd_ecs.World()
+    hhld = households_of_ages(world, [19])
+    child = anasazi.households_started(world, hhld)
+    assert np.allclose(world.loc[child, comps.AGE.years].values, 0)
+
+
+def test_children_keep_food_needs():
+    world = pd_ecs.World()
+    hhld = households_of_ages(world, [19])
+    child = anasazi.households_started(world, hhld)
+    assert np.allclose(world.loc[child, comps.FOOD_NEEDS].values, 
+                       world.loc[hhld, comps.FOOD_NEEDS].values)
+
+
+def test_children_get_half_stockpile():
+    world = pd_ecs.World()
+    hhld = households_of_ages(world, [19])
+    hhld_stockpile = world.loc[hhld, comps.STOCKPILE]
+    child = anasazi.households_started(world, hhld)
+    assert np.allclose(world.loc[hhld, comps.STOCKPILE], hhld_stockpile / 2)
+    assert np.allclose(world.loc[child, comps.STOCKPILE], hhld_stockpile / 2)
 
 
 class _CallLogger:

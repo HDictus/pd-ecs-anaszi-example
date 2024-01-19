@@ -231,24 +231,41 @@ def starve(world):
 
 
 def households_fission(
-    world, min_age=16, max_age=40, fertility=0.1):
-    households = world[[
-        comps.AGE, comps.POSITION, comps.STOCKPILE,
-        comps.FOOD_NEEDS,
-        ]]
-    of_age = households[np.logical_and(
-        households[comps.AGE.years] >= min_age,
-        households[comps.AGE.years] <= max_age)]
-    fissions = of_age[
-        np.random.uniform(0, 1, len(of_age)) < fertility]
+    world,
+    min_age=16, 
+    max_age=40, 
+    fertility=0.1
+):
+    households_of_age = _households_between_ages(world, min_age, max_age)
+
+    fissions = households_of_age[
+        np.random.uniform(0, 1, len(households_of_age)) < fertility]
     # TODO: test case where no fissions
     world.loc[fissions.index, comps.STOCKPILE.grain] /= 2
     # TODO: should have a separate event for new households
+    new = households_started(world, parents=fissions.index)
+    return new
+
+
+def _households_between_ages(world, min_age, max_age):
+    households = world[[
+        comps.AGE, comps.POSITION, comps.STOCKPILE
+        ]]
+    households_of_age = households[
+        np.logical_and(
+            households[comps.AGE.years] >= min_age,
+            households[comps.AGE.years] <= max_age
+        )
+    ]
+    return households_of_age
+
+
+def households_started(world, parents):
     new = world.add_entities({
-        comps.POSITION: fissions[comps.POSITION],
+        comps.POSITION: world.loc[parents, comps.POSITION],
         comps.AGE: {'years': 0},
-        comps.STOCKPILE: fissions[comps.STOCKPILE] / 2,
-        comps.FOOD_NEEDS: fissions[comps.FOOD_NEEDS]
+        comps.STOCKPILE: world.loc[parents, comps.STOCKPILE] / 2,
+        comps.FOOD_NEEDS: world.loc[parents, comps.FOOD_NEEDS]
     })
     return new
 

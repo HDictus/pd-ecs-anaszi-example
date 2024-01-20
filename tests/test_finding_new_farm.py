@@ -55,6 +55,31 @@ def test_moves_to_nearest_habitable_unoccupied():
         [0, 0, 0, 2, 0, 0, 0])
 
 
+def test_if_no_farm_then_die():
+    world = World()
+    lands = world.add_entities({
+        comps.POSITION: {
+            'x': [0, 0, 0, 0],
+            'y': [1, 2, 3, 4],
+        },
+        comps.YIELD: {
+            'mean': [0.1, 0.1, 0.1, 0.1]
+        },
+        comps.OCCUPYING_HOMES: {'num occupants': 0}
+    })
+    household = world.add_entities({
+        comps.POSITION: {
+            'x': [1],
+            'y': [3]
+        },
+        comps.FOOD_NEEDS: {
+            'grain': 0.2
+        }
+    })
+    anasazi.move(world, household)
+    assert all(world.loc[household, comps.FARMLAND].values == [lands[2]])
+
+
 def test_move_works_for_farmless_folks():
     world = World()
     lands = world.add_entities({

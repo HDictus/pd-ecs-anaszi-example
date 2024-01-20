@@ -125,7 +125,6 @@ def _start_farm(world, mover_ids, farm_ids):
 
 
 def _find_home(world, mover_ids, farm_ids):
-    # TODO: go back to component negation later
     potential_housing = world[
         [comps.POSITION, comps.OCCUPYING_HOMES, ~comps.FARMED]]
 
@@ -135,7 +134,10 @@ def _find_home(world, mover_ids, farm_ids):
     houses = potential_housing.iloc[
         np.argmin(house_to_farm_distance, axis=0)
     ]
-
+    incorner = np.logical_and(
+        houses[comps.POSITION.x] < 10,
+        houses[comps.POSITION.y] < 10
+    )
     return houses.index
 
 
@@ -306,7 +308,9 @@ def step(world):
     eat(world, 1)
     new = households_fission(world)
     move(world, new)
-    # TODO: shows a limitation of the ecs framework
+    occupation = world[[comps.OCCUPYING_HOMES.num, comps.POSITION]].values
+    occupation = pd.DataFrame(occupation, columns=['num', 'x', 'y'])
+    piv = occupation.pivot_table(index='y', columns='x', values='num')
     world[comps.TIME]['year'] += 1
     world[comps.AGE]['years'] += 1
     # TODO: lol dumbass, removal of households should have its onw

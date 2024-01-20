@@ -43,12 +43,9 @@ def test_fission_randomly_at_reproductive_ages():
         world,
         [15, 16, 40, 41]
     )
-
-    with assert_households_started() as ae:
-        new = anasazi.households_fission(
-            world, min_age=16, max_age=40,
-            fertility=1)
-        assert list(ae.parents) == list(hhlds[1:-1])
+    parents = anasazi.choose_fissioning_households(
+        world, min_age=16, max_age=40, fertility=1)
+    assert list(parents) == list(hhlds[1:-1])
 
 
 def test_fission_no_births():
@@ -57,8 +54,9 @@ def test_fission_no_births():
         world,
         [10, 10, 50, 50]
     )
-    with assert_households_started() as ae:
-        assert len(ae.call_logger.calls) == 0
+    parents = anasazi.choose_fissioning_households(
+        world, min_age=16, max_age=40, fertility=1)
+    assert len(parents) == 0
 
 
 def test_children_age_0():

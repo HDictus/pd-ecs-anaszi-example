@@ -10,7 +10,7 @@ def display_simulation(profile=False):
     world = World()
 
     anasazi.initialize(world)
-    win = anasazi.ui.Window(world)
+    win = anasazi.ui.Window(world, render_every=100)
     if profile:
         with cProfile.Profile() as pr:
             pyglet.app.run()
@@ -19,7 +19,7 @@ def display_simulation(profile=False):
             pr.getstats(),
             columns=['func', 'ncalls', 'ccalls', 'tottime', 'cumtime', 'callers']
         )
-        print(df.head())
+
         df.to_csv("profile.csv")
         return
     pyglet.app.run()

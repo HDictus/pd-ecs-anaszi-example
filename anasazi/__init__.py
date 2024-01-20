@@ -236,15 +236,18 @@ def households_fission(
     max_age=40, 
     fertility=0.1
 ):
-    households_of_age = _households_between_ages(world, min_age, max_age)
+    # TODO: assemble event from sub-events pre-initialized with parameters.
+    fissions = choose_fissioning_households(world, min_age=16, max_age=40, fertility=0.1)
+    new = households_started(world, parents=fissions)
+    return new
 
+
+def choose_fissioning_households(world, min_age=16, max_age=40, fertility=0.1):
+    households_of_age = _households_between_ages(world, min_age, max_age)
     fissions = households_of_age[
         np.random.uniform(0, 1, len(households_of_age)) < fertility]
-    # TODO: test case where no fissions
     world.loc[fissions.index, comps.STOCKPILE.grain] /= 2
-    # TODO: should have a separate event for new households
-    new = households_started(world, parents=fissions.index)
-    return new
+    return fissions.index
 
 
 def _households_between_ages(world, min_age, max_age):
@@ -313,7 +316,6 @@ def step(world):
     world.remove_entities(
         world[comps.AGE].index[world[comps.AGE.years] > 60]
     )
-    print("pop:", len(world[comps.AGE]))
 
 
 from anasazi import ui

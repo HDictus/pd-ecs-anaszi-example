@@ -13,7 +13,7 @@ house.anchor_y = 0
 
 class Window:
 
-    def __init__(self, world, transpose=True):
+    def __init__(self, world, transpose=True, render_every=10):
         width, height = 960, 480
         self.window = pyglet.window.Window(width, height)
         self.world = world
@@ -21,7 +21,7 @@ class Window:
         @self.window.event
         def on_draw():
             self.i+=1 
-            if self.i % 10 != 0:
+            if self.i % render_every != 0:
                 return
             self.window.clear()
             land = self.world[

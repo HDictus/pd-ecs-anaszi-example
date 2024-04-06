@@ -106,15 +106,18 @@ def _find_farm(world, movers):
     distances[~enough_to_survive] = np.inf
 
     nearest_farms = []
-
-    for dist in distances:
+    new_movers = []
+    going_to_die = []
+    for mover, dist in zip(movers, distances):
         if not np.isfinite(dist).any():
-            # assert False, "lol, TODO"
-            pass
+            going_to_die.append(mover)
+            continue
         nearest = np.argmin(dist)
         distances[:, nearest] = np.inf
         nearest_farms.append(unoccupied_land.index[nearest])
-    return movers, nearest_farms
+        new_movers.append(mover)
+    world.remove_entities(going_to_die)
+    return new_movers, nearest_farms
 
 
 def _start_farm(world, mover_ids, farm_ids):
@@ -159,6 +162,7 @@ def move(world, mover_ids):
     mover_ids, farm_ids = _find_farm(world, mover_ids)
     _start_farm(world, mover_ids, farm_ids)
     home_ids = _find_home(world, mover_ids, farm_ids)
+
     _move_in(world, mover_ids, home_ids)
 
 

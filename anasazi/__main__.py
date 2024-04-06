@@ -10,7 +10,7 @@ def display_simulation(profile=False):
     world = World()
 
     anasazi.initialize(world)
-    win = anasazi.ui.Window(world, render_every=100)
+    win = anasazi.ui.Window(world, render_every=10)
     if profile:
         with cProfile.Profile() as pr:
             pyglet.app.run()

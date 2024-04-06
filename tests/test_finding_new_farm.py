@@ -77,7 +77,7 @@ def test_if_no_farm_then_die():
         }
     })
     anasazi.move(world, household)
-    assert all(world.loc[household, comps.FARMLAND].values == [lands[2]])
+    assert len(world.index.intersection(household)) == 0
 
 
 def test_move_works_for_farmless_folks():

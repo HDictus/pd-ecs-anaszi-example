@@ -63,7 +63,7 @@ def test_children_age_0():
     world = pd_ecs.World()
     hhld = households_of_ages(world, [19])
     child = anasazi.households_started(world, hhld)
-    assert np.allclose(world.loc[child, comps.AGE.years].values, 0)
+    assert np.allclose(world.loc[child, comps.AGE].values, 0)
 
 
 def test_children_keep_food_needs():
@@ -123,10 +123,9 @@ def assert_households_started():
 def households_of_ages(world, ages):
     """Create households of given ages. Other properties are random."""
     new = world.add_entities(
-        {comps.AGE: {'years': ages},
-         comps.POSITION: {'x': range(len(ages)),
-                          'y': range(len(ages))},
-         comps.STOCKPILE: {'grain': np.ones(len(ages)) * 10},
-         comps.FOOD_NEEDS: {'grain': np.ones(len(ages))}}
-    )
+        {comps.AGE: ages,
+         comps.X: range(len(ages)),
+         comps.Y: range(len(ages)),
+         comps.STOCKPILE: np.ones(len(ages)) * 10,
+         comps.FOOD_NEEDS: np.ones(len(ages))})
     return new

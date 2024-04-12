@@ -51,11 +51,12 @@ def test_update_terrain():
         TERRAIN_DATA,
         year=800
     )
-    world.add_entities({comps.TIME: {'year': [801]}})
+    world.add_entities({comps.YEAR: [801]})
     test_module.update_terrain(
         world,
         TERRAIN_DATA
     )
+
     assert np.allclose(
         world[comps.YIELD].values,
         TERRAIN_DATA.loc[802, ['mean', 'var']].values)

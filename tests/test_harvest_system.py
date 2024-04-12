@@ -10,9 +10,10 @@ from mock import MagicMock
 
 def test_harvest():
     world = World()
-    land = world.add_entities({comps.YIELD: {'mean': [100, 200, 0], 'var': [25, 50, 0]}})
-    homes = world.add_entities({comps.STOCKPILE: {'grain': [0, 25, 60]},
-                                comps.FARMLAND: {'id': land}})
+    land = world.add_entities({comps.MEAN_YIELD: [100, 200, 0], 
+                               comps.VAR_YIELD: [25, 50, 0]})
+    homes = world.add_entities({comps.STOCKPILE: [0, 25, 60],
+                                comps.FARMLAND: land})
 
     def mock_norm(loc, scale):
         return loc + scale
@@ -21,5 +22,5 @@ def test_harvest():
     np.random.normal = mock_norm
     harvest_grain(world, max_grain_stock=250)
     np.random.normal = oldnorm
-    assert np.allclose(world[comps.STOCKPILE]['grain'].values, [125, 250, 60])
+    assert np.allclose(world[comps.STOCKPILE].values, [125, 250, 60])
 

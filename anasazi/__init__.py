@@ -23,13 +23,13 @@ def harvest_grain(world, max_grain_stock=1600):
     Part of the artificial anasazi model. The annual harvest is sampled from a normal
     distribution where the center is grain_yield['mean'] and scale is grain_yield['var']
     """
-    households = world[[comps.STOCKPILE.grain, comps.FARMLAND.id]]
-    farms = world[comps.YIELD].loc[households[comps.FARMLAND.id]]
+    households = world[[comps.STOCKPILE, comps.FARMLAND]]
+    farms = world[comps.YIELD].loc[households[comps.FARMLAND]]
     harvest = np.random.normal(
-        farms[comps.YIELD.mean[1]].values, farms[comps.YIELD.var[1]].values)
-    households[comps.STOCKPILE.grain] += np.maximum(harvest, 0)
-    households[comps.STOCKPILE.grain] = np.minimum(households[comps.STOCKPILE.grain], max_grain_stock)
-    world.loc[households.index, comps.STOCKPILE.grain] = households[comps.STOCKPILE.grain]
+        farms[comps.MEAN_YIELD].values, farms[comps.VAR_YIELD].values)
+    households[comps.STOCKPILE] += np.maximum(harvest, 0)
+    households[comps.STOCKPILE] = np.minimum(households[comps.STOCKPILE], max_grain_stock)
+    world.loc[households.index, comps.STOCKPILE] = households[comps.STOCKPILE]
     return pd.Series(harvest, index=households.index)
 
 # We run into a problem: stock-taking can depend on e.g. last harvest
@@ -47,8 +47,8 @@ def stock_taking(world, harvest):
     harvest: a series containing the size of the last harvest
     """
     households = world[[comps.FOOD_NEEDS, comps.STOCKPILE]]
-    expected_food = households[comps.STOCKPILE.grain] + harvest
-    expects_to_starve = households[comps.FOOD_NEEDS.grain]\
+    expected_food = households[comps.STOCKPILE] + harvest
+    expects_to_starve = households[comps.FOOD_NEEDS]\
           > expected_food
     # TODO: this is increasingly indicating that these need to be methods of an object,
     #    one with access to world.
@@ -78,30 +78,45 @@ def _calculate_distances_matrix(positions1, positions2):
 
 def _move_out(world, movers):
     have_farm = world[comps.FARMLAND].index.intersection(movers)
-    if len(have_farm) > 0:
-        del world.loc[world.loc[have_farm, comps.FARMLAND.id], comps.FARMED]
+    del world.loc[have_farm, comps.FARMLAND]
     have_home = world[comps.HOME].index.intersection(movers)
     if len(have_home) == 0:
         return
-    unique_homes, counts = np.unique(
-        world.loc[have_home, comps.HOME.id],
-        return_counts=True)
-    world.loc[unique_homes, comps.OCCUPYING_HOMES.num] -= counts
     del world.loc[have_home, comps.HOME]
 
 
 def _find_farm(world, movers):
     # TODO: we should use numba.njit for this tbh
     # TODO: or a matching algorithm, only then it's not strictly speaking artifical anasazi...
-    land = world[[comps.YIELD, comps.POSITION, comps.OCCUPYING_HOMES, ~comps.FARMED]]
-    unoccupied_land = land[
-        land[comps.OCCUPYING_HOMES.num] == 0]
-
+    # TODO: scipy.kdtree would speed things up too.
+    # TODO: I think I understand now the logic of grouping multiple events into system objects
+    #  say we wanted to use a KDTree here for efficiency - and say that it were most efficient
+    #  to add/remove from the KDTree whenever a piece of land becomes occupied/unoccupied
+    #  Then the logic of the e.g. 'die' event becomes entangled with the implementation of 
+    #  the _find_farm method, and so it makes sense to separate the parts relating to that
+    #  implementation in their own object.
+    # TODO: The issue I see however, is that this makes the implementation dictate the usage
+    #   of a given system. Now we have to initialize and object and register and call its various
+    #   events. 
+    # TODO: we could instead make use of the data abstraction capabilities of pd_ecs
+    #   In the same module as farm finding we can register a 'setter' method that registers when
+    #   farmland becomes available and adds it to the kdtree.
+    #   But for this we need to be able to register multiple 'setters' for a given object
+    #   and this should only be added if the system is actually to be run, which leads us to the same problems
+    # TODO: Another option might be to only use the most efficient implementation that preserves ideal usage
+    #   indeed, we do not know a priori if it is faster to add things to the KDTree all the time, or only
+    #   when we are about to use it. To complicate the usage in general, throughout the program, for a 'maybe'
+    #   is a shame. Even if we try it and find the less user-friendly implementation is faster, we do not know
+    #   for sure that a more user-friendly, faster implementation will occur to us in the future.
+    # TODO: the following line is bugged in pd_ecs - identify and fix
+    # unoccupied_land = world[comps.POSITION + [~comps.OCCUPYING_HOMES, comps.MEAN_YIELD, ~comps.FARMED]]
+    unoccupied_land = world[comps.POSITION + [comps.MEAN_YIELD, ~comps.OCCUPYING_HOMES, ~comps.FARMED]]
     distances = _calculate_distances_matrix(
         world.loc[movers, comps.POSITION].values,
         unoccupied_land[comps.POSITION].values)
-    enough_to_survive = world.loc[movers, comps.FOOD_NEEDS.grain].values[..., np.newaxis]\
-        <= unoccupied_land[comps.YIELD.mean].values[np.newaxis]
+
+    enough_to_survive = world.loc[movers, comps.FOOD_NEEDS].values[..., np.newaxis]\
+        <= unoccupied_land[comps.MEAN_YIELD].values[np.newaxis]
     
     distances[~enough_to_survive] = np.inf
 
@@ -123,13 +138,11 @@ def _find_farm(world, movers):
 def _start_farm(world, mover_ids, farm_ids):
     # TODO: would be cooler if we could 'give' with .loc
     world.give(mover_ids, {
-        comps.FARMLAND: {comps.FARMLAND.id[1]: farm_ids}})
-    world.give(farm_ids, {comps.FARMED: {'is_farmed': True}})
-
+        comps.FARMLAND: farm_ids})
 
 def _find_home(world, mover_ids, farm_ids):
     potential_housing = world[
-        [comps.POSITION, comps.OCCUPYING_HOMES, ~comps.FARMED]]
+        comps.POSITION + [~comps.FARMED]]
 
     house_to_farm_distance = _calculate_distances_matrix(
         potential_housing[comps.POSITION].values,
@@ -138,20 +151,19 @@ def _find_home(world, mover_ids, farm_ids):
         np.argmin(house_to_farm_distance, axis=0)
     ]
     incorner = np.logical_and(
-        houses[comps.POSITION.x] < 10,
-        houses[comps.POSITION.y] < 10
+        houses[comps.X] < 10,
+        houses[comps.Y] < 10
     )
     return houses.index
 
 
 def _move_in(world, household_ids, house_ids):
     unique_ids, house_counts = np.unique(house_ids, return_counts=True)
-    world.loc[unique_ids, comps.OCCUPYING_HOMES.num] += house_counts
     # there are too many different ways to update the world state
     # this does not make it especially simple
     # getitem is really simple... maybe we should just stick with that?
-    world.loc[household_ids, comps.POSITION] = world.loc[house_ids, comps.POSITION]
-    world.give(household_ids, {comps.HOME: {'id': house_ids}})
+    world.loc[household_ids, comps.POSITION] = world.loc[house_ids, comps.POSITION].values
+    world.give(household_ids, {comps.HOME: house_ids})
 
 
 def move(world, mover_ids):
@@ -184,37 +196,31 @@ def load_terrain(terrain_file, min_year, soil_quality_variance=0.2, coeff_var=0.
     })
     return dataframe.set_index(['year', 'x', 'y'])
 
-def _get_terrain_this_year(world, terrain_data):
-    # we should probably have a better way to deal with global vars...
-    year = world[comps.TIME].iloc[0].year
-    this_year = terrain_data.set_index('year').loc[year].reset_index()
-    return {
-        comps.YIELD: this_year[['mean', 'var']],
-        comps.POSITION: this_year[['x', 'y']]
-    }
-
-
 def initialize_terrain(world, terrain_data, year=800):
-    terrain = world.add_entities({
-        comps.POSITION: terrain_data.loc[year].reset_index()[['x', 'y']],
-        comps.OCCUPYING_HOMES: {'num occupants': 0},
-        comps.YIELD: terrain_data.loc[year, ['mean', 'var']],
+    xy = terrain_data.loc[year].reset_index()[['x', 'y']]
+    terrain_state = pd.DataFrame(
+        {
+        comps.X: xy['x'],
+        comps.Y: xy['y'],
+        comps.MEAN_YIELD: terrain_data.loc[year, 'mean'].values,
+        comps.VAR_YIELD: terrain_data.loc[year, 'var'].values,
     })
+    terrain = world.add_entities(terrain_state)
     return terrain
 
 
 def update_terrain(world, terrain_data):
     # TODO: it would be way better to use the historical rainfall data
     #  directly and convert that to annual yield in this process.
-    terrain = world[(comps.POSITION, comps.YIELD)]
-    year = world[comps.TIME].iloc[0].year
+    terrain = world[comps.POSITION +  comps.YIELD]
+    year = world[comps.YEAR].iloc[0]
     this_year = terrain_data.loc[year]
-    yields = terrain[comps.YIELD].assign(**terrain[comps.POSITION]).set_index(['x', 'y'])
-    yields[['mean', 'var']] = this_year[['mean', 'var']]
+    yields = terrain[comps.YIELD].assign(x=terrain[comps.X], y=terrain[comps.Y]).set_index(['x', 'y'])
+    yields[[comps.MEAN_YIELD, comps.VAR_YIELD]] = this_year[['mean', 'var']]
     # TODO: this should give a better error message
     # world.update(yields.set_index(terrain.ids))
     # TODO: i've learned that I'm dissatisfied with my ecs
-    world.update({comps.YIELD: yields.set_index(terrain.ids)})
+    world.update(yields.set_index(terrain.index))
 
 # naming convention is all over the place
 def eat(world, dt):
@@ -231,19 +237,26 @@ def starve(world):
     stockpiles = world[[comps.FOOD_NEEDS, comps.STOCKPILE]]
     world.remove_entities(
         stockpiles.index[
-            stockpiles[comps.FOOD_NEEDS.grain] 
-            > stockpiles[comps.STOCKPILE.grain]]
+            stockpiles[comps.FOOD_NEEDS] 
+            > stockpiles[comps.STOCKPILE]]
     )
+
+
+def die(world, households):
+    farmland = world.loc[households, comps.FARMLAND]
+    homes = world.loc[households, comps.HOME]
+    del world.loc[households]
+    # TODO: allow using del instead of remove
+    # del world.loc[farmland, comps.FARMED]
 
 
 def households_fission(
     world,
     min_age=16, 
     max_age=40, 
-    fertility=0.1
 ):
     # TODO: assemble event from sub-events pre-initialized with parameters.
-    fissions = choose_fissioning_households(world, min_age=16, max_age=40, fertility=0.1)
+    fissions = choose_fissioning_households(world, min_age=min_age, max_age=max_age, fertility=fertility)
     new = households_started(world, parents=fissions)
     return new
 
@@ -252,18 +265,18 @@ def choose_fissioning_households(world, min_age=16, max_age=40, fertility=0.1):
     households_of_age = _households_between_ages(world, min_age, max_age)
     fissions = households_of_age[
         np.random.uniform(0, 1, len(households_of_age)) < fertility]
-    world.loc[fissions.index, comps.STOCKPILE.grain] /= 2
+    world.loc[fissions.index, comps.STOCKPILE] /= 2
     return fissions.index
 
 
 def _households_between_ages(world, min_age, max_age):
     households = world[[
-        comps.AGE, comps.POSITION, comps.STOCKPILE
+        comps.AGE, comps.X, comps.Y, comps.STOCKPILE
         ]]
     households_of_age = households[
         np.logical_and(
-            households[comps.AGE.years] >= min_age,
-            households[comps.AGE.years] <= max_age
+            households[comps.AGE] >= min_age,
+            households[comps.AGE] <= max_age
         )
     ]
     return households_of_age
@@ -271,8 +284,9 @@ def _households_between_ages(world, min_age, max_age):
 
 def households_started(world, parents):
     new = world.add_entities({
-        comps.POSITION: world.loc[parents, comps.POSITION],
-        comps.AGE: {'years': 0},
+        comps.X: world.loc[parents, comps.X],
+        comps.Y: world.loc[parents, comps.Y],
+        comps.AGE: 0,
         comps.STOCKPILE: world.loc[parents, comps.STOCKPILE] / 2,
         comps.FOOD_NEEDS: world.loc[parents, comps.FOOD_NEEDS]
     })
@@ -282,26 +296,30 @@ def households_started(world, parents):
 
 def initialize(world):
   
-    world.add_entities(
-        {comps.TIME: {'year': [800]}})
+    world.add_entities({comps.YEAR: [800]})
 
     world.terrain_data = load_terrain(
         pkg_resources.resource_filename("anasazi", "yields 800-1349.npy"),
         min_year=800
     )
     initialize_terrain(world, world.terrain_data)
+
+    N = 100
+    hhlds = initialize_households(world, N)
+    move(world, hhlds)
+
+
+def initialize_households(world, N):
     minp = world[comps.POSITION].min()
     maxp = world[comps.POSITION].max()
-    N = 100
     hhlds = world.add_entities({
-        comps.POSITION: {
-            'x': np.random.uniform(minp.x, maxp.x, size=N),
-            'y': np.random.uniform(minp.y, maxp.y, size=N)},
+        comps.X: np.random.uniform(minp[comps.X], maxp[comps.X], size=N),
+        comps.Y: np.random.uniform(minp[comps.Y], maxp[comps.Y], size=N),
         # what were the actual parameters again?
-        comps.AGE: {'years': np.random.uniform(0, 50, size=N)},
-        comps.FOOD_NEEDS: {'grain': 800},
-        comps.STOCKPILE: {'grain': 800}})
-    move(world, hhlds)
+        comps.AGE: np.random.uniform(0, 50, size=N),
+        comps.FOOD_NEEDS: 800,
+        comps.STOCKPILE:  800})
+    return hhlds
 
 
 def step(world):
@@ -312,17 +330,15 @@ def step(world):
     eat(world, 1)
     new = households_fission(world)
     move(world, new)
-    occupation = world[[comps.OCCUPYING_HOMES.num, comps.POSITION]].values
-    occupation = pd.DataFrame(occupation, columns=['num', 'x', 'y'])
-    piv = occupation.pivot_table(index='y', columns='x', values='num')
-    world[comps.TIME]['year'] += 1
-    world[comps.AGE]['years'] += 1
+
+    world[comps.YEAR] += 1
+    world[comps.AGE] += 1
     # TODO: lol dumbass, removal of households should have its onw
     #   event that can deal with e.g. freeing up farmed land
     # But no, even better. Should implement column set/getting.
     # these can be inferred from other entities FARMED and POSITIONs
     world.remove_entities(
-        world[comps.AGE].index[world[comps.AGE.years] > 60]
+        world[comps.AGE].index[world[comps.AGE] > 60]
     )
 
 

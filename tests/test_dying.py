@@ -36,7 +36,7 @@ def own_farms(world, households):
 
 @given("the households each have a house", target_fixture='homes')
 def own_house(world, households):
-    homes = world[[anasazi.comps.MEAN_YIELD,anasazi.comps.OCCUPYING_HOMES,  ~anasazi.comps.FARMED]].iloc[:len(households)]
+    homes = world[[anasazi.comps.MEAN_YIELD,  ~anasazi.comps.FARMED]].iloc[:len(households)]
     anasazi._move_in(world, households, homes.index)
     return world.loc[homes.index, [anasazi.comps.OCCUPYING_HOMES]]
 
@@ -56,9 +56,6 @@ def farms_vacant(world, dying, farms):
 
 @then('their house should be vacant')
 def houses_vacant(world, dying, homes):
-    print("!!")
-    print(world[[anasazi.comps.MEAN_YIELD, ~anasazi.comps.FARMED, anasazi.comps.OCCUPYING_HOMES]])
-    new = world.loc[dying[anasazi.comps.HOME], anasazi.comps.OCCUPYING_HOMES]
-    print(world[[anasazi.comps.MEAN_YIELD, ~anasazi.comps.FARMED, anasazi.comps.OCCUPYING_HOMES]])
-
-    assert all(new.values == homes.loc[new.index, anasazi.comps.OCCUPYING_HOMES].values - 1)
+    assert not np.any(np.isin(
+        dying[anasazi.comps.HOME],
+        world[anasazi.comps.OCCUPYING_HOMES]))

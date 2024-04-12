@@ -228,7 +228,7 @@ def eat(world, dt):
     # their being slices may be counterintuitive.
     # we'd need some way to know that the corresponding world data
     # has not been updated.
-    needs, piles = world[(comps.FOOD_NEEDS, comps.STOCKPILE)].data()
+    needs, piles = world[comps.FOOD_NEEDS], world[comps.STOCKPILE]
     piles -= needs * dt
     world.update({comps.STOCKPILE: piles})
 
@@ -254,6 +254,7 @@ def households_fission(
     world,
     min_age=16, 
     max_age=40, 
+    fertility=0.1
 ):
     # TODO: assemble event from sub-events pre-initialized with parameters.
     fissions = choose_fissioning_households(world, min_age=min_age, max_age=max_age, fertility=fertility)
@@ -330,13 +331,14 @@ def step(world):
     eat(world, 1)
     new = households_fission(world)
     move(world, new)
+    years = world[comps.YEAR]
+    world.loc[years.index, comps.YEAR] = years + 1
+    ages = world[comps.AGE]
+    world.loc[ages.index, comps.AGE] = ages + 1
+    # TODO: this should be ok to do IMO
+    # world[comps.YEAR] += 1
+    # world[comps.AGE] += 1
 
-    world[comps.YEAR] += 1
-    world[comps.AGE] += 1
-    # TODO: lol dumbass, removal of households should have its onw
-    #   event that can deal with e.g. freeing up farmed land
-    # But no, even better. Should implement column set/getting.
-    # these can be inferred from other entities FARMED and POSITIONs
     world.remove_entities(
         world[comps.AGE].index[world[comps.AGE] > 60]
     )

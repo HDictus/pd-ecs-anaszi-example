@@ -3,6 +3,7 @@ from pathlib import Path
 import pandas as pd
 import pkg_resources
 from tqdm import tqdm
+import scipy
 import anasazi.components as comps
 
 # BIG TODO: revisit this with the goal of writing out the optimal, most sensical way of doing it instead of a working implementattion
@@ -111,29 +112,32 @@ def _find_farm(world, movers):
     # TODO: the following line is bugged in pd_ecs - identify and fix
     # unoccupied_land = world[comps.POSITION + [~comps.OCCUPYING_HOMES, comps.MEAN_YIELD, ~comps.FARMED]]
     unoccupied_land = world[comps.POSITION + [comps.MEAN_YIELD, ~comps.OCCUPYING_HOMES, ~comps.FARMED]]
-    distances = _calculate_distances_matrix(
-        world.loc[movers, comps.POSITION].values,
-        unoccupied_land[comps.POSITION].values)
-
-    enough_to_survive = world.loc[movers, comps.FOOD_NEEDS].values[..., np.newaxis]\
-        <= unoccupied_land[comps.MEAN_YIELD].values[np.newaxis]
+    tree = scipy.spatial.KDTree(unoccupied_land[comps.POSITION].values)
+    mover_positions = world.loc[movers, comps.POSITION]
+    dists, nearest = tree.query(mover_positions.values, min(50, len(unoccupied_land)))
+    mover_needs = world.loc[movers, comps.FOOD_NEEDS]
+    nearest_yields = unoccupied_land.iloc[nearest.flatten()][comps.MEAN_YIELD].values.reshape(nearest.shape)
+    enough_to_survive = nearest_yields >= mover_needs.values[:, np.newaxis]
     
-    distances[~enough_to_survive] = np.inf
+    already_taken = set()
+    farm_nums = pd.Series({})
+    for mover, farms, enough in zip(movers, nearest, enough_to_survive):
+        farm_num = _first_free_farm(mover, farms[enough], already_taken)
+        farm_nums[mover] = farm_num
+    
+    going_to_die = farm_nums.index[farm_nums == -1]
+    farm_nums = farm_nums[farm_nums != -1]
+    farm_ids = pd.Series(unoccupied_land.index[farm_nums], index=farm_nums.index)
 
-    nearest_farms = []
-    new_movers = []
-    going_to_die = []
-    for mover, dist in zip(movers, distances):
-        if not np.isfinite(dist).any():
-            going_to_die.append(mover)
-            continue
-        nearest = np.argmin(dist)
-        distances[:, nearest] = np.inf
-        nearest_farms.append(unoccupied_land.index[nearest])
-        new_movers.append(mover)
     world.remove_entities(going_to_die)
-    return new_movers, nearest_farms
+    return farm_ids.index, farm_ids.values
 
+def _first_free_farm(mover, farm_nums, already_taken: set):
+    for farm_num in farm_nums:
+        if farm_num not in already_taken:
+            already_taken.add(farm_num)
+            return farm_num
+    return -1
 
 def _start_farm(world, mover_ids, farm_ids):
     # TODO: would be cooler if we could 'give' with .loc

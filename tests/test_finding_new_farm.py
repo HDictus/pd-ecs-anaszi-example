@@ -89,3 +89,8 @@ def test_move_works_for_farmless_folks():
     anasazi.move(world, households)
     assert all(world.loc[households, comps.FARMLAND].values == [lands[4], lands[5]])
     assert all(world[comps.HOME].values == [lands[3], lands[3]])
+    
+
+# TODO: before doing this, fix up the duplication in the test cases
+def test_move_only_where_water():
+    pass

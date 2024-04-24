@@ -40,13 +40,8 @@ def harvest_grain(world, max_grain_stock=1600):
 # that's kinda meaningless.
 # the previous way of doing it: an event that calls eg. a move event is not right either
 # too much entanglement
-def stock_taking(world, harvest):
-    """All households predict whether they will have enough food to survive.
 
-    Those which do not expect a large enough harvest next year will move.
-
-    harvest: a series containing the size of the last harvest
-    """
+def decide_whether_to_move(world, harvest):
     households = world[[comps.FOOD_NEEDS, comps.STOCKPILE]]
     expected_food = households[comps.STOCKPILE] + harvest
     expects_to_starve = households[comps.FOOD_NEEDS]\
@@ -54,7 +49,20 @@ def stock_taking(world, harvest):
     # TODO: this is increasingly indicating that these need to be methods of an object,
     #    one with access to world.
     # perhaps world itself.
-    move(world, households[expects_to_starve].index)
+    movers = households[expects_to_starve].index
+    return movers
+
+
+def stock_taking(world, harvest):
+    """All households predict whether they will have enough food to survive.
+
+    Those which do not expect a large enough harvest next year will move.
+
+    harvest: a series containing the size of the last harvest
+    """
+    movers = decide_whether_to_move(world, harvest)
+    move(world, movers)
+
 
 # TODO: a lot of these questions come down to: when should something be passed from function to function, and when should it be stored in the world state.
 # Ultimately this depends on whether taht value will be used in the future...

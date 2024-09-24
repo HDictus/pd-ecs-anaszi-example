@@ -155,7 +155,7 @@ def _start_farm(world, mover_ids, farm_ids):
 def _find_home(world, mover_ids, farm_ids):
     potential_housing = world[
         comps.POSITION + [~comps.FARMED]]
-
+    water_sources = world[comps.WATER_SOURCE]
     house_to_farm_distance = _calculate_distances_matrix(
         potential_housing[comps.POSITION].values,
         world.loc[farm_ids, comps.POSITION].values)
@@ -167,6 +167,24 @@ def _find_home(world, mover_ids, farm_ids):
         houses[comps.Y] < 10
     )
     return houses.index
+
+def load_water(world, file):
+    world.water_data = pd.read_csv(file)
+
+
+def update_water(world, data):
+    year = world[comps.YEAR].iloc[0]
+    water_data = world.water_data
+    new_sources = water_data[water_data['start'] == year]
+    old_sources = water_data[water_data['end'] == year]
+    print(year, len(new_sources), len(old_sources))
+    old = world[comps.WATER_SOURCE]
+    world.remove_entities(old.index[np.isin(old, old_sources['sid'])])
+    world.add_entities({
+        comps.WATER_SOURCE: new_sources['sid'],
+        comps.X: new_sources['x'],
+        comps.Y: new_sources['y']
+    })
 
 
 def _move_in(world, household_ids, house_ids):
@@ -315,6 +333,7 @@ def initialize(world):
         pkg_resources.resource_filename("anasazi", "yields 800-1349.npy"),
         min_year=800
     )
+    load_water(world, pkg_resources.resource_filename('anasazi', 'water.csv'))
     initialize_terrain(world, world.terrain_data)
 
     N = 100
@@ -337,6 +356,7 @@ def initialize_households(world, N):
 
 def step(world):
     update_terrain(world, world.terrain_data)
+    update_water(world, world.water_data)
     harvest = harvest_grain(world)
     stock_taking(world, harvest)
     starve(world)

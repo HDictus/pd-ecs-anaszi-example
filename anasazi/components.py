@@ -34,6 +34,8 @@ HOME = Component('home', int)
 
 FARMED = Component('is_farmed')
 
+WATER_SOURCE = Component("water source id")
+
 @gets(FARMED)
 def farmed_by_a_farmer(world):
     return pd.Series(True, index=world[FARMLAND], name=FARMED)

@@ -7,14 +7,18 @@ import pyglet
 
 house = pyglet.image.load(
     pkg_resources.resource_filename("anasazi", "house.png"))
-house.anchor_x = house.width//2
-house.anchor_y = 0
+#house.anchor_x = house.width//2
+#house.anchor_y = 0
 
+water = pyglet.image.load(
+    pkg_resources.resource_filename("anasazi", "water.png")
+)
+#water.anchor_x = water.width // 2
 
 class Window:
 
     def __init__(self, world, transpose=True, render_every=1):
-        width, height = 960, 480
+        width, height = 1280, 960
         self.window = pyglet.window.Window(width, height)
         self.world = world
         self.i = 0
@@ -39,6 +43,7 @@ class Window:
             yieldcolor[np.isnan(yieldcolor)] = 0
             patches_batch = pyglet.graphics.Batch()
             patches = []
+            # TODO: can probably get large benefits from not re-initializing
             for i in posn.index:
                 # TODO: num occupying, num occupants... I need to make sure these are enums or sth.
                 patch = pyglet.shapes.Rectangle(
@@ -64,10 +69,27 @@ class Window:
                     batch=houses_batch)
                 sprite.scale = row[comp.OCCUPYING_HOMES] / 3
                 sprites.append(sprite)
-                
+            
+            sources_batch = pyglet.graphics.Batch()
+
+            sources = world[comp.POSITION + [comp.WATER_SOURCE]]
+            if transpose:
+                sources[[comp.X, comp.Y]] =\
+                    sources[[comp.Y, comp.X]]
+            for _, row in sources.iterrows():
+                sprite = pyglet.sprite.Sprite(
+                    water,
+                    x=row[comp.X] * ratio,
+                    y=row[comp.Y] * ratio,
+                    batch=sources_batch
+                )
+                sprite.scale = 1
+                sprites.append(sprite)
+
             patches_batch.draw()
+            sources_batch.draw()
             houses_batch.draw()
-                
+            
 
         @self.window.event
         def update(dt):

@@ -43,28 +43,30 @@ def good_farmland(world):
             anasazi.comps.VAR_YIELD: 5,
         })
     )
-    
-@when("some households move", target_fixture='movers')
+
+@when("some households move", target_fixture='original_positions')
 def household_moves(world, households):
     movers = households[:3]
-    return movers
+    original_positions = world.loc[movers, anasazi.comps.POSITION + [anasazi.comps.FOOD_NEEDS]]
+    anasazi.move(world, movers)
+    return original_positions
 
-    
+
 @then('they move to the nearest empty plot with enough yield')
-def household_movers(world, movers):
-    previous_position = world.loc[movers, anasazi.comps.POSITION]
-    target_farms = world[anasazi.comps.POSITION + [anasazi.comps.MEAN_YIELD, ~anasazi.comps.FARMED]]
+def household_movers(world, original_positions):
+    previous_position = original_positions[anasazi.comps.POSITION]
+    movers = original_positions.index
+    target_farms = world[anasazi.comps.POSITION + [anasazi.comps.MEAN_YIELD]]#, ~anasazi.comps.FARMED]]
+    # TODO: manage farmed land in other test cases
     expected = []
     for mover, posn in previous_position.iterrows():
-        need = world.loc[mover, anasazi.comps.FOOD_NEEDS]
+        need = original_positions.loc[mover, anasazi.comps.FOOD_NEEDS]
         ok = target_farms[target_farms[anasazi.comps.MEAN_YIELD] >= need]
-        distances = np.linalg.norm(ok[anasazi.comps.POSITION] - posn, axis=0)
+        distances = np.linalg.norm(ok[anasazi.comps.POSITION] - posn, axis=1)
         nearest = ok.index[np.argmin(distances)]
         target_farms = target_farms[target_farms.index != nearest]
         expected.append(nearest)
-        
-    anasazi.move(world, movers)
+
     assert np.isin(movers, world.index).all()
     farms = world.loc[movers, anasazi.comps.FARMLAND]
     assert all(farms == expected)
-    

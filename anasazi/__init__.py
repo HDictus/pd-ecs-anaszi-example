@@ -120,13 +120,14 @@ def _find_farm(world, movers):
     # TODO: the following line is bugged in pd_ecs - identify and fix
     # unoccupied_land = world[comps.POSITION + [~comps.OCCUPYING_HOMES, comps.MEAN_YIELD, ~comps.FARMED]]
     unoccupied_land = world[comps.POSITION + [comps.MEAN_YIELD, ~comps.OCCUPYING_HOMES, ~comps.FARMED]]
+    # exclude empty
+    unoccupied_land = unoccupied_land[unoccupied_land[comps.MEAN_YIELD] > 0]
     tree = scipy.spatial.KDTree(unoccupied_land[comps.POSITION].values)
     mover_positions = world.loc[movers, comps.POSITION]
     dists, nearest = tree.query(mover_positions.values, min(50, len(unoccupied_land)))
     mover_needs = world.loc[movers, comps.FOOD_NEEDS]
     nearest_yields = unoccupied_land.iloc[nearest.flatten()][comps.MEAN_YIELD].values.reshape(nearest.shape)
     enough_to_survive = nearest_yields >= mover_needs.values[:, np.newaxis]
-    
     already_taken = set()
     farm_nums = pd.Series({})
     for mover, farms, enough in zip(movers, nearest, enough_to_survive):

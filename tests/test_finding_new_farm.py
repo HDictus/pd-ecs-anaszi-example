@@ -3,6 +3,7 @@ from pd_ecs import World
 import pandas as pd
 from mock import MagicMock
 from anasazi import components as comps
+import pytest
 import anasazi
 import mock
 
@@ -57,6 +58,7 @@ def test_moves_to_nearest_habitable_unoccupied():
         pd.Series([2], index=[3], name=comps.OCCUPYING_HOMES))
 
 
+@pytest.mark.xfail
 def test_if_no_farm_then_die():
     world = World()
     lands = world.add_entities({

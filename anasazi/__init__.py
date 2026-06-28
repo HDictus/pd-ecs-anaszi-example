@@ -129,11 +129,11 @@ def _find_farm(world, movers):
     nearest_yields = unoccupied_land.iloc[nearest.flatten()][comps.MEAN_YIELD].values.reshape(nearest.shape)
     enough_to_survive = nearest_yields >= mover_needs.values[:, np.newaxis]
     already_taken = set()
-    farm_nums = pd.Series({})
+    farm_nums = {}
     for mover, farms, enough in zip(movers, nearest, enough_to_survive):
         farm_num = _first_free_farm(mover, farms[enough], already_taken)
         farm_nums[mover] = farm_num
-    
+    farm_nums = pd.Series(farm_nums)
     going_to_die = farm_nums.index[farm_nums == -1]
     farm_nums = farm_nums[farm_nums != -1]
     farm_ids = pd.Series(unoccupied_land.index[farm_nums], index=farm_nums.index)
@@ -178,7 +178,6 @@ def update_water(world, data):
     water_data = world.water_data
     new_sources = water_data[water_data['start'] == year]
     old_sources = water_data[water_data['end'] == year]
-    print(year, len(new_sources), len(old_sources))
     old = world[comps.WATER_SOURCE]
     world.remove_entities(old.index[np.isin(old, old_sources['sid'])])
     world.add_entities({

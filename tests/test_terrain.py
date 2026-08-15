@@ -40,7 +40,7 @@ def test_initialize_terrain():
         world[comps.YIELD].values,
         TERRAIN_DATA.loc[800, ['mean', 'var']].values
     )
-    assert all(world[comps.OCCUPYING_HOMES] == 0)
+    assert all(test_module.home_occupancy(world) == 0)
 
 
 def test_update_terrain():

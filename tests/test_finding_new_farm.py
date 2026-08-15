@@ -51,11 +51,11 @@ def test_moves_to_nearest_habitable_unoccupied():
     assert all(world.loc[households, comps.FARMLAND].values == [lands[4], lands[5]])
     assert all(world[comps.HOME].values == [lands[3], lands[3]])
 
-    assert all(world[comps.FARMED].index
+    assert all(anasazi.farmed_land_ids(world)
                == [lands[2], lands[4], lands[5]])
     pd.testing.assert_series_equal(
-        world[comps.OCCUPYING_HOMES],
-        pd.Series([2], index=[3], name=comps.OCCUPYING_HOMES))
+        anasazi.home_occupancy(world),
+        pd.Series([2], index=[3], name=comps.HOME))
 
 
 @pytest.mark.xfail

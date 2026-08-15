@@ -1,6 +1,5 @@
 """All the components for the simulation."""
-import pandas as pd
-from pd_ecs import Component, gets, sets
+from pd_ecs import Component
 
 
 # TODO: should I really group things together like this, or would it be best to
@@ -32,30 +31,7 @@ STOCKPILE = Component("corn stockpike (Kg)")
 FARMLAND = Component('farm owned', int)
 HOME = Component('home', int)
 
-FARMED = Component('is_farmed')
-
 WATER_SOURCE = Component("water source id")
-
-
-@gets(FARMED)
-def farmed_by_a_farmer(world):
-    return pd.Series(True, index=world[FARMLAND], name=FARMED)
-
-
-@sets(FARMED)
-def farmers_that_just_farm(world, index, values):
-    world.add_entities({FARMLAND: index})
-
-
-OCCUPYING_HOMES = Component('occupying homes')
-@gets(OCCUPYING_HOMES)
-def occupied_by_household(world):
-    series = world[HOME].value_counts()
-    return pd.Series(
-        series.values,
-        index=series.index.values,
-        name=OCCUPYING_HOMES
-    )
 
 
 AGE = Component('age (years)')

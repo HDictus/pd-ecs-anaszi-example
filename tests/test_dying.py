@@ -27,11 +27,11 @@ def some_die(world, households):
 @then('their farms should be vacant')
 def farms_vacant(world, dying, farms):
     farms = dying[anasazi.comps.FARMLAND]
-    assert not any(np.isin(farms, world[anasazi.comps.FARMED].index))
+    assert not any(np.isin(farms, anasazi.farmed_land_ids(world)))
 
 
 @then('their house should be vacant')
 def houses_vacant(world, dying, homes):
     assert not np.any(np.isin(
         dying[anasazi.comps.HOME],
-        world[anasazi.comps.OCCUPYING_HOMES]))
+        anasazi.home_occupancy(world)))

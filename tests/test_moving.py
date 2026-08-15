@@ -56,7 +56,7 @@ def household_moves(world, households):
 def household_movers(world, original_positions):
     previous_position = original_positions[anasazi.comps.POSITION]
     movers = original_positions.index
-    target_farms = world[anasazi.comps.POSITION + [anasazi.comps.MEAN_YIELD]]#, ~anasazi.comps.FARMED]]
+    target_farms = world[anasazi.comps.POSITION + [anasazi.comps.MEAN_YIELD]]
     # TODO: manage farmed land in other test cases
     expected = []
     for mover, posn in previous_position.iterrows():

@@ -32,7 +32,7 @@ class Window:
                 comp.POSITION + comp.YIELD]
             posn = land[comp.POSITION]
             yields = land[comp.YIELD]
-            farmed_land = self.world[comp.FARMED]
+            farmed_land = anasazi.farmed_land_ids(self.world)
             if transpose:
                 posn[['x', 'y']] = posn[[comp.Y, comp.X]]
             maxx = posn['x'].max()
@@ -49,25 +49,27 @@ class Window:
                 patch = pyglet.shapes.Rectangle(
                     x=posn.loc[i, 'x'] * ratio, y=posn.loc[i, 'y'] * ratio,
                     width=ratio, height=ratio,
-                    color=(0 if i in farmed_land.index else 255, int(yieldcolor[i]), 0),
+                    color=(0 if i in farmed_land else 255, int(yieldcolor[i]), 0),
                     batch=patches_batch)
                 patches.append(patch)
 
             houses_batch = pyglet.graphics.Batch()
-            houses = world[comp.POSITION + [comp.OCCUPYING_HOMES]]
+            occupancy = anasazi.home_occupancy(self.world)
+            houses = self.world[comp.POSITION].to_frame().loc[occupancy.index]
+            houses[comp.HOME] = occupancy
             if transpose:
-                # TODO: much better to do by maintaining sprites and 
+                # TODO: much better to do by maintaining sprites and
                 # using their positions indepenent of actual
                 houses[[comp.X, comp.Y]] =\
                     houses[[comp.Y, comp.X]]
             sprites = []
             for _, row in houses.iterrows():
                 sprite =pyglet.sprite.Sprite(
-                    house, 
+                    house,
                     x=row[comp.X] * ratio,
                     y=row[comp.Y] * ratio,
                     batch=houses_batch)
-                sprite.scale = row[comp.OCCUPYING_HOMES] / 3
+                sprite.scale = row[comp.HOME] / 3
                 sprites.append(sprite)
             
             sources_batch = pyglet.graphics.Batch()

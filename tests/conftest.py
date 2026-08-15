@@ -1,4 +1,5 @@
 import anasazi
+import pandas as pd
 import pd_ecs
 from pathlib import Path
 from pytest_bdd import given
@@ -27,6 +28,7 @@ def own_farms(world, households):
 
 @given("the households each have a house", target_fixture='homes')
 def own_house(world, households):
-    homes = world[[anasazi.comps.MEAN_YIELD,  ~anasazi.comps.FARMED]].iloc[:len(households)]
-    anasazi._move_in(world, households, homes.index)
-    return world.loc[homes.index, [anasazi.comps.OCCUPYING_HOMES]]
+    land_ids = world[anasazi.comps.MEAN_YIELD].index
+    home_ids = land_ids.difference(anasazi.farmed_land_ids(world))[:len(households)]
+    anasazi._move_in(world, households, home_ids)
+    return anasazi.home_occupancy(world).reindex(home_ids)

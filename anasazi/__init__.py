@@ -18,6 +18,18 @@ import anasazi.components as comps
 # TODO: if we want integrate arbitrary models, things like max_grain_stock need to be components
 #   or part of the stockpile component
 # then, we need some means to efficiently query the stockpile.
+def farmed_land_ids(world):
+    """Ids of the farm plots currently owned by a household."""
+    ind = world[comps.FARMLAND].values
+    return pd.Index(ind)
+
+
+def home_occupancy(world):
+    """Number of households currently occupying each home."""
+    counts = world[comps.HOME].value_counts()
+    return pd.Series(counts.values, index=counts.index.values, name=comps.HOME)
+
+
 def harvest_grain(world, max_grain_stock=1600):
     """All households harvest grain.
 
@@ -117,9 +129,9 @@ def _find_farm(world, movers):
     #   when we are about to use it. To complicate the usage in general, throughout the program, for a 'maybe'
     #   is a shame. Even if we try it and find the less user-friendly implementation is faster, we do not know
     #   for sure that a more user-friendly, faster implementation will occur to us in the future.
-    # TODO: the following line is bugged in pd_ecs - identify and fix
-    # unoccupied_land = world[comps.POSITION + [~comps.OCCUPYING_HOMES, comps.MEAN_YIELD, ~comps.FARMED]]
-    unoccupied_land = world[comps.POSITION + [comps.MEAN_YIELD, ~comps.OCCUPYING_HOMES, ~comps.FARMED]]
+    land = world[comps.POSITION + [comps.MEAN_YIELD]].to_frame()
+    occupied_or_farmed = home_occupancy(world).index.union(farmed_land_ids(world))
+    unoccupied_land = land.drop(index=occupied_or_farmed, errors='ignore')
     # exclude empty
     unoccupied_land = unoccupied_land[unoccupied_land[comps.MEAN_YIELD] > 0]
     tree = scipy.spatial.KDTree(unoccupied_land[comps.POSITION].values)
@@ -154,8 +166,8 @@ def _start_farm(world, mover_ids, farm_ids):
         comps.FARMLAND: farm_ids})
 
 def _find_home(world, mover_ids, farm_ids):
-    potential_housing = world[
-        comps.POSITION + [~comps.FARMED]]
+    positioned = world[comps.POSITION].to_frame()
+    potential_housing = positioned.drop(index=farmed_land_ids(world), errors='ignore')
     water_sources = world[comps.WATER_SOURCE]
     house_to_farm_distance = _calculate_distances_matrix(
         potential_housing[comps.POSITION].values,
@@ -276,8 +288,6 @@ def die(world, households):
     farmland = world.loc[households, comps.FARMLAND]
     homes = world.loc[households, comps.HOME]
     del world.loc[households]
-    # TODO: allow using del instead of remove
-    # del world.loc[farmland, comps.FARMED]
 
 
 def households_fission(

@@ -1,54 +1,28 @@
 import numpy as np
-from anasazi import MovingSystem
 from pd_ecs import World
+import pandas as pd
 from mock import MagicMock
-from anasazi import position, stockpile, food_needs, grain_yield, \
-    occupying_farms, farmland, occupying_houses, home
-
-
-# TODO: adding a component to a world should be implicit when you add an entity or system with the component
-
-# TODO: should also test that when we move entities they unoccupy their old farm
-comps = (stockpile, food_needs, position,
-         occupying_farms, farmland, grain_yield,
-         occupying_houses, home)
+from anasazi import components as comps
+import pytest
+import anasazi
+import mock
 
 
 def test_moves_after_small_harvest():
-    world = World(*comps)
-    world.events.find_home = MagicMock()
-    world.events.move_out = MagicMock()
-    ms = MovingSystem(world)
+    world = World()
+    # TODO: it is better to be able to avoid mocking
+    # say we choose to call it something else?
+    # it's a little brittle.
+    oldmove = anasazi.move
+    anasazi.move = mock.MagicMock()
     households = world.add_entities({
-        stockpile: {'grain': [1, 2, 3, 1]},
-        food_needs: {'grain': [2.5, 2.5, 2.5, 2.5]}})
-    world.events.harvest(households, [1, 0.1, 0, 2.0])
-    arg0, = world.events.move_out.mock_calls[0].args
-    assert (arg0 == [0, 1]).all()
-    arg1, = world.events.find_home.mock_calls[0].args
-    assert (arg1 == [0, 1]).all()
+        comps.STOCKPILE: [1, 2, 3, 2],
+        comps.FOOD_NEEDS: [2.5, 2.5, 2.5, 2.5]})
+    anasazi.stock_taking(world, pd.Series([1, 1, 0, 0], index=households))
 
+    assert all(anasazi.move.call_args[0][1] == [0, 3])
+    anasazi.move = oldmove
 
-def test_move_out_unoccupies_house_and_farm():
-    world = World(*comps)
-    land = np.array(world.add_entities({
-        position: {'x': [1, 2, 3, 4, 5, 6, 7, 8], 'y': [4, 5,  5, 6, 7, 8, 9, 10]},
-        occupying_farms: {'num occupants': [1, 0, 1, 0, 1, 1, 1, 0]},
-        occupying_houses: {'num occupants': [0, 1, 0, 2, 0, 0, 0, 2]}}))
-    farmers = world.add_entities({home: {'id': land[[1, 3, 3, 7, 7]]},
-                                  farmland: {'id': land[[0, 2, 4, 5, 6]]}})
-    ms = MovingSystem(world)
-    world.events.move_out(farmers[:-1])
-    print(world[occupying_farms]['num occupants'])
-    assert np.allclose(world[occupying_farms]['num occupants'], [
-        0, 0, 0, 0, 0, 0, 1, 0])
-    assert np.allclose(world[occupying_houses]['num occupants'], [
-        0, 0, 0, 0, 0, 0, 0, 1])
-
-
-
-# TODO: test move_out and then find_home called
-# TODO: test move_out event
 
 def test_moves_to_nearest_habitable_unoccupied():
     """
@@ -58,48 +32,67 @@ def test_moves_to_nearest_habitable_unoccupied():
 
     When multiple households move, the first in the list gets priority.
     """
-    world = World(*comps)
-    ms = MovingSystem(world)
-    world.events.move_in = MagicMock()
-    households = world.add_entities({
-        position: {'x': [0, 0], 'y': [100, 100]},
-        food_needs: {'grain': [1, 1]}})
+    world = World()
     lands = world.add_entities({
-        position: {'x': [0, 0, 0, 0, 0], 'y': [110, 115, 120, 125, 105]},
-        occupying_farms: {'num occupants': [1, 0, 0, 0, 0]},
-        occupying_houses: {'num occupants': [0, 0, 0, 0, 2]},
-        grain_yield: {'mean': [1.0, 0.5, 1.0, 1.0, 1.0]}})
-    world.events.find_home(households)
-    outs, farms = world.events.move_in.mock_calls[0].args
-    assert outs == households
-    assert farms == [lands[2], lands[3]]
+        comps.X: [0, 0, 0, 0, 0, 5, 0], 
+        comps.Y: [100, 100, 110, 115, 120, 120, 105],
+        comps.MEAN_YIELD: [0.1, 0.1, 1.0, 0.5, 1.0, 1.0, 0.1]})
+    world.add_entities({comps.FARMLAND: lands[2:3]})
 
-# TODO: perhaps housing and farming should be separate systems
-
-
-def test_move_in_occupies_new_places():
-    world = World(*comps)
-    ms = MovingSystem(world)
     households = world.add_entities({
-        position: {'x': [0, 0], 'y': [100, 100]},
-        food_needs: {'grain': [1, 1]}})
+        comps.X: [0, 0], 
+        comps.Y: [100, 100],
+        comps.FOOD_NEEDS: [1, 1],
+        comps.FARMLAND: [0, 1],
+        comps.HOME: [6, 6],
+    })
 
+    anasazi.move(world, households)
+    assert all(world.loc[households, comps.FARMLAND].values == [lands[4], lands[5]])
+    assert all(world[comps.HOME].values == [lands[3], lands[3]])
+
+    assert all(anasazi.farmed_land_ids(world)
+               == [lands[2], lands[4], lands[5]])
+    pd.testing.assert_series_equal(
+        anasazi.home_occupancy(world),
+        pd.Series([2], index=[3], name=comps.HOME))
+
+
+@pytest.mark.xfail
+def test_if_no_farm_then_die():
+    world = World()
     lands = world.add_entities({
-        position: {'x': [0, 0, 0, 0, 0], 'y': [110, 115, 120, 125, 105]},
-        occupying_farms: {'num occupants': [1, 0, 0, 0, 0]},
-        occupying_houses: {'num occupants': [0, 0, 0, 0, 2]},
-        grain_yield: {'mean': [1.0, 0.5, 1.0, 1.0, 1.0]}})
+        comps.X: [0, 0, 0, 0],
+        comps.Y: [1, 2, 3, 4],
+        comps.MEAN_YIELD:  [0.1, 0.1, 0.1, 0.1],
+    })
+    household = world.add_entities({
+        comps.X: [1],
+        comps.Y: [3],
+        comps.FOOD_NEEDS:  0.2
+    })
+    anasazi.move(world, household)
+    assert len(world.index.intersection(household)) == 0
 
-    world.events.move_in(households,
-                         [lands[2], lands[3]])
-    assert np.allclose(world[farmland].loc[households, 'id'].values,
-                       [lands[2], lands[3]])
-    assert np.allclose(world[home].loc[households, 'id'].values,
-                       [lands[1], lands[1]])
-    assert np.allclose(world[position].loc[households], [[0, 115], [0, 115]])
 
-    assert np.allclose(world[occupying_houses].values[:, 0], [0, 2, 0, 0, 2])
-    assert np.allclose(world[occupying_farms].values[:, 0], [1, 0, 1, 1, 0])
+def test_move_works_for_farmless_folks():
+    world = World()
+    lands = world.add_entities({
+        comps.X: [0, 0, 0, 0, 0, 5, 0], 
+        comps.Y: [100, 100, 110, 115, 120, 120, 105],
+        comps.MEAN_YIELD: [0.1, 0.1, 1.0, 0.5, 1.0, 1.0, 0.1]})
+    world.add_entities({comps.FARMLAND: lands[:3]})
+    households = world.add_entities({
+        comps.X: [0, 0],
+        comps.Y: [100, 100],
+        comps.FOOD_NEEDS: [1, 1],
+    })
 
-# TODO: test move_in event is called
-# TODO: test move_in event
+    anasazi.move(world, households)
+    assert all(world.loc[households, comps.FARMLAND].values == [lands[4], lands[5]])
+    assert all(world[comps.HOME].values == [lands[3], lands[3]])
+    
+
+# TODO: before doing this, fix up the duplication in the test cases
+def test_move_only_where_water():
+    pass
